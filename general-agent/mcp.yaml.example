@@ -1,0 +1,9 @@
+# remote:
+#   - name: test
+#     endpoint: https://example.com/mcp
+# local:
+#   - name: test
+#     cmd: ./mymcp
+
+remote:
+local:
