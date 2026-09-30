@@ -3,8 +3,13 @@ package tool
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io/fs"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -80,6 +85,52 @@ func execWithTimeout(parent context.Context, timeout int, name string, args ...s
 	return stdout.String(), stderr.String(), false, err
 }
 
+var errStopWalk = errors.New("stop walk")
+
+// listFiles 递归列出 root 下的所有普通文件，返回相对路径（使用 '/' 分隔）。
+// 跳过隐藏条目（文件名以 '.' 开头），limit<=0 时默认上限为 1000。
+func listFiles(root string, limit int) ([]string, error) {
+	if fi, err := os.Stat(root); err != nil {
+		return nil, err
+	} else if !fi.IsDir() {
+		return nil, os.ErrInvalid
+	}
+	if limit <= 0 {
+		limit = 1000
+	}
+
+	var out []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err // 进入子目录失败则跳过该分支
+		}
+		name := d.Name()
+		// 跳过隐藏文件/目录（路径中任一层以 '.' 开头）
+		if strings.HasPrefix(name, ".") && path != root {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		rel, rerr := filepath.Rel(root, path)
+		if rerr != nil {
+			return nil
+		}
+		out = append(out, filepath.ToSlash(rel))
+		if len(out) >= limit {
+			return errStopWalk // 达到上限，提前结束
+		}
+		return nil
+	})
+	if err != nil && err != errStopWalk {
+		return out, err
+	}
+	return out, nil
+}
+
 func LoadAPIFunctions(L *lua.LState) error {
 	// 执行一个进程并返回结果（带超时）：exec_with_timeout(timeout, command, args) -> stdout, stderr, timeouted, error
 	L.SetGlobal("exec_with_timeout", L.NewFunction(func(L *lua.LState) int {
@@ -123,6 +174,31 @@ func LoadAPIFunctions(L *lua.LState) error {
 			L.Push(lua.LBool(false))
 		}
 		return 1
+	}))
+
+	// 递归列出目录下的文件（相对路径，'/' 分隔）：qmi_list_files(root, limit) -> files(array), error
+	// - root: 要扫描的目录；不存在或不是目录时返回错误
+	// - limit: 可选，最多返回多少个文件，<=0 时用默认上限(1000)
+	// - 跳过隐藏文件/目录（任一层以 '.' 开头），只返回普通文件
+	L.SetGlobal("qmi_list_files", L.NewFunction(func(L *lua.LState) int {
+		root := L.CheckString(1)
+		var limit int
+		if L.Get(2) != lua.LNil {
+			limit = int(L.CheckNumber(2))
+		}
+		files, err := listFiles(root, limit)
+		if err != nil {
+			L.Push(L.NewTable()) // 空表
+			L.Push(lua.LString(err.Error()))
+			return 2
+		}
+		resT := L.NewTable()
+		for i, f := range files {
+			resT.RawSetInt(i+1, lua.LString(f))
+		}
+		L.Push(resT)
+		L.Push(lua.LNil)
+		return 2
 	}))
 
 	// 获取系统信息

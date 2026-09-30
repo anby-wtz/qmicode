@@ -159,3 +159,111 @@ func TestLoadToolsFromScriptBadFile(t *testing.T) {
 		t.Fatal("expected error for missing file")
 	}
 }
+
+func TestListFiles(t *testing.T) {
+	root := t.TempDir()
+	mustWrite := func(rel, content string) {
+		t.Helper()
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite("a.md", "x")
+	mustWrite("sub/b.md", "y")
+	mustWrite("deep/c/d.txt", "z")
+	mustWrite(".hidden/h.md", "h") // 隐藏目录，应跳过
+	mustWrite("sub/.secret", "s") // 隐藏文件，应跳过
+
+	files, err := listFiles(root, 0)
+	if err != nil {
+		t.Fatalf("listFiles: %v", err)
+	}
+	got := map[string]bool{}
+	for _, f := range files {
+		got[f] = true
+	}
+	want := []string{"a.md", "sub/b.md", "deep/c/d.txt"}
+	if len(files) != len(want) {
+		t.Fatalf("expected %d files, got %v", len(want), files)
+	}
+	for _, w := range want {
+		if !got[w] {
+			t.Errorf("missing file %q in %v", w, files)
+		}
+	}
+
+	// limit 截断
+	files2, err := listFiles(root, 1)
+	if err != nil {
+		t.Fatalf("listFiles(limit): %v", err)
+	}
+	if len(files2) != 1 {
+		t.Errorf("limit=1 expected 1 file, got %v", files2)
+	}
+
+	// root 不存在
+	if _, err := listFiles(filepath.Join(root, "nope"), 0); err == nil {
+		t.Error("expected error for missing dir")
+	}
+
+	// root 是文件
+	filePath := filepath.Join(root, "a.md")
+	if _, err := listFiles(filePath, 0); err == nil {
+		t.Error("expected error when root is a file")
+	}
+}
+
+func TestQmiListFilesLuaAPI(t *testing.T) {
+	path := writeScript(t, `
+tools = {
+    {
+        name = "List",
+        description = "list files via qmi_list_files",
+        parameters = { type = "object", properties = {} },
+        pre_msg = function(args) return "listing" end,
+        exec = function(args)
+            local root = args.root or ""
+            local limit = args.limit or 0
+            local files, err = qmi_list_files(root, limit)
+            if err ~= nil then return "", "", err end
+            return table.concat(files, ",") .. "|" .. tostring(#files), "listed", nil
+        end,
+    },
+}
+`)
+	group, err := LoadToolsFromScript(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	defer group.Destroy()
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "sub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{"a.md", "sub/b.md"} {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.WriteFile(p, []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	res, _, err := group.Tools[0].CallExecFunc(context.Background(), map[string]any{"root": root})
+	if err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if res != "a.md,sub/b.md|2" {
+		t.Errorf("unexpected result: %q", res)
+	}
+
+	// 不存在的目录 -> error
+	res, _, err = group.Tools[0].CallExecFunc(context.Background(), map[string]any{"root": filepath.Join(root, "nope")})
+	if err == nil || !strings.Contains(res+" "+err.Error(), "nope") {
+		t.Errorf("expected error for missing dir, got res=%q err=%v", res, err)
+	}
+}

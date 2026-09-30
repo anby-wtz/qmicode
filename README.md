@@ -176,7 +176,31 @@ false: 进程正常执行完成
 如果执行成功，返回 nil
 如果发生错误，返回具体的错误描述信息
 
-#### 5.1.2 qmi_is_interrupted()
+#### 5.1.2 qmi_list_files(root, limit)
+
+##### 函数原型
+
+```lua
+files, error = qmi_list_files(root, limit)
+```
+
+##### 功能描述
+
+递归列出目录 `root` 下的所有普通文件，返回相对路径数组（以 `/` 分隔）。跨平台一致，无需依赖 shell。
+
+##### 参数说明
+
+1. root (字符串类型)：要扫描的目录；不存在或不是目录时返回错误
+2. limit (数字类型，可选)：最多返回的文件数；<=0 时使用默认上限(1000)
+
+##### 返回值说明
+
+1. files (表类型)：相对路径数组（数组形式）
+2. error (字符串类型/nil)：出错时返回错误描述，成功时为 nil
+
+注意：跳过隐藏文件与目录（任一路径层以 `.` 开头），只返回普通文件。
+
+#### 5.1.3 qmi_is_interrupted()
 
 ##### 函数原型
 
@@ -218,7 +242,32 @@ end
 SCRIPT_PATH = "/path/to/script.lua" -- 脚本路径
 ```
 
-### 5.3 中断机制（Ctrl-C）
+### 5.3 Skill（按需加载的领域指令）
+
+Skill 用于把"某类任务的完整操作指引"从系统提示词中剥离出来，按需注入上下文：Agent 平时只看到 skill 的名字与描述，任务匹配时通过 `Skill` 工具加载其完整正文。
+
+目录约定（仅 Agent 级发现，与 sysprompt/tools/cptprompt 平级）：
+
+```
+<agentDir>/skills/<name>/SKILL.md      # SKILL.md 本体（frontmatter + 正文）
+<agentDir>/skills/<name>/...           # 附带资源（references/、scripts/ 等任意文件）
+```
+
+`SKILL.md` 必须以 YAML frontmatter 开头，至少包含两个标量字段：
+
+- `name`：skill 名（必填；不对 name 做格式校验，但建议与目录名一致）
+- `description`：一句话说明何时该用这个 skill（必填，用于让模型判断是否加载）
+
+其余 frontmatter 字段（如 license、references 列表等）会被忽略。frontmatter 之后的全部内容作为正文返回给 LLM。
+
+使用方式：
+
+- `Skill(name='list')`：列出当前 agent 下所有可用 skill（名称 + 描述）
+- `Skill(name='<name>')`：加载指定 skill，输出格式为 `SKILL.md of <name> (<path>):` + 正文 + Base directory + 附带文件清单（采样上限20个）。正文中的相对路径均以该 skill 目录为基准。
+
+示例见仓库内 `general-agent/skills/git-release/`。
+
+### 5.4 中断机制（Ctrl-C）
 
 CLI 中按 Ctrl-C 会取消当前正在进行的请求，具体行为：
 
