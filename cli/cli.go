@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"qmicode-go/app/appmcp"
+	appagent "qmicode-go/app/agent"
 	"qmicode-go/app/config"
 	appmc "qmicode-go/app/modelconfig"
 	clisafe "qmicode-go/app/safe"
@@ -110,7 +111,7 @@ func GetDefaultEditorAndHistory(promptWriter func(io.Writer) (int, error)) (*rea
 func Start() {
 	conf := config.DefaultConfig
 
-	general_agent, err := agent.LoadPathAgent(conf.GetAgentPath(conf.GeneralAgentName), conf.GeneralAgentName)
+	general_agent, err := appagent.LoadPathAgent(conf.GetAgentPath(conf.GeneralAgentName), conf.GeneralAgentName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%sFailed: %v%s\n", Red, err, Reset)
 		os.Exit(1)

@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	core "qmicode-go/codelib/agent"
 	"qmicode-go/codelib/session"
 	"qmicode-go/codelib/tool"
 	"sort"
@@ -39,7 +40,7 @@ import (
 	"github.com/openai/openai-go"
 )
 
-// PathAgent 是 Agent（定义层）的一个实现：提示词加载 + 工具定义/注册。
+// PathAgent 是 core.Agent（定义层）的一个实现：提示词加载 + 工具定义/注册。
 type PathAgent struct {
 	Name          string
 	SysPromptPath string
@@ -219,4 +220,4 @@ func (a *PathAgent) Destroy() {
 }
 
 // 检查接口实现
-var _ Agent = (*PathAgent)(nil)
+var _ core.Agent = (*PathAgent)(nil)
