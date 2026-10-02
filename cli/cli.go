@@ -7,8 +7,8 @@ import (
 	"io"
 	"maps"
 	"os"
-	"qmicode-go/app/appmcp"
 	appagent "qmicode-go/app/agent"
+	"qmicode-go/app/appmcp"
 	"qmicode-go/app/config"
 	appmc "qmicode-go/app/modelconfig"
 	clisafe "qmicode-go/app/safe"
@@ -108,47 +108,50 @@ func GetDefaultEditorAndHistory(promptWriter func(io.Writer) (int, error)) (*rea
 	return __editor, __history
 }
 
+var (
+	currentAgent     agent.Agent
+	currentAgentName string
+
+	currentModelName string
+)
+
+func updateCurrentAgent(conf *config.Config, name string) error {
+	if name == currentAgentName {
+		return nil
+	}
+	if currentAgent != nil {
+		currentAgent.Destroy()
+	}
+	agent, err := appagent.LoadPathAgent(conf.GetAgentPath(name), name)
+	if err != nil {
+		return err
+	}
+	currentAgent = agent
+	currentAgentName = name
+	return nil
+}
+
 func Start() {
 	conf := config.DefaultConfig
 
-	general_agent, err := appagent.LoadPathAgent(conf.GetAgentPath(conf.GeneralAgentName), conf.GeneralAgentName)
+	err := updateCurrentAgent(&conf, conf.GeneralAgentName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%sFailed: %v%s\n", Red, err, Reset)
 		os.Exit(1)
 	}
 
-	defer general_agent.Destroy()
+	defer currentAgent.Destroy()
 
-	rt := agent.NewAgentRuntime(general_agent)
+	rt := agent.NewAgentRuntime(currentAgent)
 
-	sess := general_agent.GetInitLLMSession(time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05"))
+	sess := currentAgent.GetInitLLMSession(time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05"))
 
 	var modelConfig coremc.ModelConfig
 
-	err = appmc.LoadDefaultModel(&modelConfig, conf)
+	currentModelName, err = appmc.LoadDefaultModel(&modelConfig, conf)
 	if err != nil {
 		fmt.Printf("%sLoad Default Model Failed: %v. Please Set You Model By `/setmodel`%s\n", Red, err, Reset)
 	}
-
-	// load mcp for test
-
-	// err = appmcp.ConfigAllMcp(context.Background(), []*appmcp.RemoteMcpConfig{
-	// 	{
-	// 		Name:     "exa",
-	// 		Endpoint: "https://mcp.exa.ai/mcp",
-	// 	},
-	// }, []*appmcp.LocalMcpConfig{}, general_agent, func(tp appmcp.McpType, name string) {
-	// 	fmt.Printf("%sconnecting to MCP %s (%s).%s\n", Green, name, func(tp appmcp.McpType) string {
-	// 		switch tp {
-	// 		case appmcp.McpTypeRemote:
-	// 			return "Remote"
-	// 		case appmcp.McpTypeLocal:
-	// 			return "Local"
-	// 		default:
-	// 			return "Unknown"
-	// 		}
-	// 	}(tp), Reset)
-	// })
 
 	mcpConfig, err := appmcp.GetMcpListConfigFromFile(
 		conf.GetAgentMcpConfigFilePath(conf.GeneralAgentName),
@@ -180,7 +183,7 @@ func Start() {
 	}
 
 	err = appmcp.ConfigAllMcp(context.Background(),
-		remoteList, localList, general_agent,
+		remoteList, localList, currentAgent,
 		func(tp appmcp.McpType, name string) {
 			fmt.Printf("%sconnecting to MCP %s (%s).%s\n", Green, name, func(tp appmcp.McpType) string {
 				switch tp {
@@ -207,7 +210,7 @@ FinishMcpConnect:
 	}
 
 	editor, history := GetDefaultEditorAndHistory(func(w io.Writer) (int, error) {
-		return fmt.Fprintf(w, "\n%s(Usage: %d)%s %s> %s", Cyan, sess.Usage, Reset, Bold, Reset)
+		return fmt.Fprintf(w, "\n%s(Agent: %s%s%s, Model: %s%s%s, Usage: %s%d%s)%s %s> %s", Cyan, Bold, currentAgentName, Reset+Cyan, Bold, currentModelName, Reset+Cyan, Bold, sess.Usage, Reset+Cyan, Reset, Bold, Reset)
 	})
 
 	for {

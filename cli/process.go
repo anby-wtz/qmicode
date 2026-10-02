@@ -115,6 +115,7 @@ func process_special_input(conf config.Config, input string, rt agent.AgentRunti
 			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
 			return false
 		}
+		currentModelName = name
 		return false
 
 	case ORDER["ORDER_LIST_MODEL"]:

@@ -86,20 +86,21 @@ func SetModelToDefault(conf config.Config, name string) error {
 	return nil
 }
 
-func LoadDefaultModel(model *coremc.ModelConfig, conf config.Config) error {
+// return default name
+func LoadDefaultModel(model *coremc.ModelConfig, conf config.Config) (string, error) {
 	confPath := conf.GetGeneralConfigFilePath()
 	dataRaw, err := os.ReadFile(confPath)
 	if err != nil {
-		return err
+		return "", err
 	}
 	data := make(map[string]any)
 	err = yaml.Unmarshal(dataRaw, &data)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defaultModelName := data["defaultModel"]
 	if defaultModelName == "" {
-		return fmt.Errorf("no default model set")
+		return "", fmt.Errorf("no default model set")
 	}
-	return Load(model, conf, defaultModelName.(string))
+	return defaultModelName.(string), Load(model, conf, defaultModelName.(string))
 }
