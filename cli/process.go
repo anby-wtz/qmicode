@@ -54,7 +54,7 @@ func getOneLine(prompt string) (string, error) {
 	return editor.ReadLine(context.Background())
 }
 
-func process_special_input(conf config.Config, input string, ag agent.Agent, sess *session.LLMSession, model *coremc.ModelConfig, sf *clisafe.SafeConfig) bool {
+func process_special_input(conf config.Config, input string, rt agent.AgentRuntime, sess *session.LLMSession, model *coremc.ModelConfig, sf *clisafe.SafeConfig) bool {
 	switch input {
 	case ORDER["ORDER_EXIT"], ORDER["ORDER_QUIT"]:
 		fmt.Printf("%sExiting...%s\n", Cyan, Reset)
@@ -186,7 +186,7 @@ func process_special_input(conf config.Config, input string, ag agent.Agent, ses
 		return false
 
 	case ORDER["ORDER_COMPACT"]:
-		if err := ag.Compact(context.Background(), *model, sess, resCallback); err != nil {
+		if err := rt.Compact(context.Background(), *model, sess, resCallback); err != nil {
 			if errors.Is(err, agent.ErrInterrupted) {
 				fmt.Printf("\n%s[Interrupted]%s Compact aborted, session unchanged.%s\n", Yellow, Reset, Reset)
 			} else {

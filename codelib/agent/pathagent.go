@@ -28,22 +28,18 @@ In tools directory, files without the .lua extension are ignored.
 package agent
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"qmicode-go/codelib/modelconfig"
 	"qmicode-go/codelib/session"
 	"qmicode-go/codelib/tool"
 	"sort"
 	"strings"
 
 	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
-	"github.com/openai/openai-go/packages/param"
 )
 
+// PathAgent 是 Agent（定义层）的一个实现：提示词加载 + 工具定义/注册。
 type PathAgent struct {
 	Name          string
 	SysPromptPath string
@@ -56,13 +52,6 @@ type PathAgent struct {
 	ExtraTools []tool.Tool
 }
 
-type LLMChunkContentType int
-
-const (
-	ContentReasoning LLMChunkContentType = iota
-	ContentAnswer
-)
-
 func LoadPathAgent(agentPath string, name string) (*PathAgent, error) {
 	agent := PathAgent{
 		Name:          name,
@@ -73,7 +62,7 @@ func LoadPathAgent(agentPath string, name string) (*PathAgent, error) {
 
 	entries, err := os.ReadDir(agent.SysPromptPath)
 	if err != nil {
-		return &PathAgent{}, err
+		return &agent, err
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
@@ -85,7 +74,7 @@ func LoadPathAgent(agentPath string, name string) (*PathAgent, error) {
 			path := filepath.Join(agent.SysPromptPath, entry.Name())
 			content, err := os.ReadFile(path)
 			if err != nil {
-				return &PathAgent{}, err
+				return &agent, err
 			}
 			agent.SysPrompt += string(content) + "\n"
 		}
@@ -93,7 +82,7 @@ func LoadPathAgent(agentPath string, name string) (*PathAgent, error) {
 
 	entries, err = os.ReadDir(agent.ToolsPath)
 	if err != nil {
-		return &PathAgent{}, err
+		return &agent, err
 	}
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".lua") {
@@ -101,7 +90,7 @@ func LoadPathAgent(agentPath string, name string) (*PathAgent, error) {
 			group, err := tool.LoadToolsFromScript(path)
 			if err != nil {
 				agent.Destroy()
-				return &PathAgent{}, fmt.Errorf("failed to load tools %s: %v", path, err)
+				return &agent, fmt.Errorf("failed to load tools %s: %v", path, err)
 			}
 			agent.Tools = append(agent.Tools, *group)
 		}
@@ -114,7 +103,7 @@ func LoadPathAgent(agentPath string, name string) (*PathAgent, error) {
 			t := &agent.Tools[i].Tools[j]
 			if prev, dup := seen[t.Name]; dup {
 				agent.Destroy()
-				return &PathAgent{}, fmt.Errorf("duplicate tool name %q in %s and %s", t.Name, prev, agent.Tools[i].Path)
+				return &agent, fmt.Errorf("duplicate tool name %q in %s and %s", t.Name, prev, agent.Tools[i].Path)
 			}
 			seen[t.Name] = agent.Tools[i].Path
 		}
@@ -122,7 +111,7 @@ func LoadPathAgent(agentPath string, name string) (*PathAgent, error) {
 
 	entries, err = os.ReadDir(agent.CptPromptPath)
 	if err != nil {
-		return &PathAgent{}, err
+		return &agent, err
 	}
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Name() < entries[j].Name()
@@ -132,204 +121,58 @@ func LoadPathAgent(agentPath string, name string) (*PathAgent, error) {
 			path := filepath.Join(agent.CptPromptPath, entry.Name())
 			content, err := os.ReadFile(path)
 			if err != nil {
-				return &PathAgent{}, err
+				return &agent, err
 			}
 			agent.CptPrompt += string(content) + "\n"
 		}
 	}
 
 	return &agent, nil
-
 }
 
-func (agent *PathAgent) GetInitLLMSession(name string) *session.LLMSession {
-	res := session.LLMSession{}
-	res.SetSessionName(name)
-	res.AddMessage(openai.SystemMessage(agent.SysPrompt))
-	return &res
+func (a *PathAgent) GetName() string {
+	return a.Name
 }
 
-func (a *PathAgent) GetPreMsg(name string, args map[string]any) (string, error) {
-	// Lua tools
+func (a *PathAgent) GetSysPrompt() string {
+	return a.SysPrompt
+}
+
+func (a *PathAgent) GetCompactPrompt() string {
+	return a.CptPrompt
+}
+
+// ListTools 返回当前全部可用工具的统一视图（静态 Lua 工具 + 动态注册的工具）。
+func (a *PathAgent) ListTools() []tool.Tool {
+	res := make([]tool.Tool, 0)
+	for i := range a.Tools {
+		for j := range a.Tools[i].Tools {
+			t := &a.Tools[i].Tools[j]
+			res = append(res, t)
+		}
+	}
+	for _, t := range a.ExtraTools {
+		res = append(res, t)
+	}
+	return res
+}
+
+// FindTool 按名称查找工具（静态 Lua 工具优先，其次动态注册的工具）。
+func (a *PathAgent) FindTool(name string) (tool.Tool, bool) {
 	for i := range a.Tools {
 		for j := range a.Tools[i].Tools {
 			t := &a.Tools[i].Tools[j]
 			if t.Name == name {
-				return t.CallPreMsgFunc(args)
-			}
-		}
-	}
-	// ExtraTools（动态添加的工具）
-	for i := range a.ExtraTools {
-		if a.ExtraTools[i].GetName() == name {
-			return a.ExtraTools[i].CallPreMsgFunc(args)
-		}
-	}
-	return "", fmt.Errorf("tool %s not found", name)
-}
-
-func (a *PathAgent) ExecuteTool(ctx context.Context, name string, args map[string]any) (string, string, error) {
-	for i := range a.Tools {
-		for j := range a.Tools[i].Tools {
-			t := &a.Tools[i].Tools[j]
-			if t.Name == name {
-				return t.CallExecFunc(ctx, args)
+				return t, true
 			}
 		}
 	}
 	for _, t := range a.ExtraTools {
 		if t.GetName() == name {
-			return t.CallExecFunc(ctx, args)
+			return t, true
 		}
 	}
-	return "", "", fmt.Errorf("tool %s not found", name)
-}
-
-func (a *PathAgent) Request(ctx context.Context, config modelconfig.ModelConfig, sess *session.LLMSession, result ChunkResultFuncCallback) ([]openai.ChatCompletionMessageToolCall, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	client := openai.NewClient(
-		option.WithBaseURL(config.BaseURL),
-		option.WithAPIKey(config.ApiKey),
-	)
-	openaiTools := make([]openai.ChatCompletionToolParam, 0)
-	for i := range a.Tools {
-		for j := range a.Tools[i].Tools {
-			t := &a.Tools[i].Tools[j]
-			openaiTools = append(openaiTools, t.ToOpenAITool())
-		}
-	}
-	if len(a.ExtraTools) > 0 {
-		for _, t := range a.ExtraTools {
-			openaiTools = append(openaiTools, t.ToOpenAITool())
-		}
-	}
-	stream := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
-		Model:    config.Model,
-		Messages: sess.Messages,
-		Tools:    openaiTools,
-		StreamOptions: openai.ChatCompletionStreamOptionsParam{
-			IncludeUsage: param.Opt[bool]{Value: true},
-		},
-	})
-	var acc openai.ChatCompletionAccumulator
-	var partialContent string // 已产出的正文内容，用于中断时保留为 assistant message
-
-	for stream.Next() {
-		chunk := stream.Current()
-		acc.AddChunk(chunk)
-
-		for _, choice := range chunk.Choices {
-			raw := choice.Delta.RawJSON()
-			var rawMap map[string]string
-			err := json.Unmarshal([]byte(raw), &rawMap)
-			if err != nil {
-				continue
-			}
-			reasoning, ok := rawMap["reasoning"]
-			if ok && reasoning != "" {
-				result(reasoning, ContentReasoning)
-				continue
-			}
-			reasoning, ok = rawMap["reasoning_content"]
-			if ok && reasoning != "" {
-				result(reasoning, ContentReasoning)
-				continue
-			}
-
-			if choice.Delta.Content != "" {
-				partialContent += choice.Delta.Content
-				result(choice.Delta.Content, ContentAnswer)
-				continue
-			}
-		}
-	}
-
-	if ctx.Err() != nil {
-		// 用户中断：保留已产出的部分输出为一条 assistant message（不保存未完成的 tool_calls，避免产生非法会话），然后返回 ErrInterrupted。
-		if partialContent != "" {
-			sess.AddMessage(openai.AssistantMessage(partialContent))
-		}
-		return nil, ErrInterrupted
-	}
-
-	if err := stream.Err(); err != nil {
-		return nil, err
-	}
-
-	msg := acc.Choices[0].Message
-	sess.AddMessage(msg.ToParam())
-
-	if len(msg.ToolCalls) > 0 {
-		return msg.ToolCalls, nil
-	}
-
-	sess.Usage = int(acc.Usage.TotalTokens)
-
-	return nil, nil
-
-}
-
-func (a *PathAgent) ExecuteTools(ctx context.Context, ts []openai.ChatCompletionMessageToolCall, sess *session.LLMSession, premsgfunc PreMsgFilterFuncCallback, aftermsgfunc AfterMsgFuncCallback) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	interrupted := false
-	for _, tc := range ts {
-		args := make(map[string]any)
-		json.Unmarshal([]byte(tc.Function.Arguments), &args)
-
-		// 已中断：当前及后续工具全部标记为 Aborted，保证 assistant.tool_calls 与 tool message 一一对应。
-		if ctx.Err() != nil || interrupted {
-			sess.AddMessage(
-				openai.ToolMessage(
-					"Aborted by user", tc.ID,
-				),
-			)
-			interrupted = true
-			continue
-		}
-
-		premsg, err := a.GetPreMsg(tc.Function.Name, args)
-		if !premsgfunc(premsg, err) {
-			sess.AddMessage(
-				openai.ToolMessage(
-					"Human Aborted", tc.ID,
-				),
-			)
-			continue
-		}
-
-		res, human, err := a.ExecuteTool(ctx, tc.Function.Name, args)
-		if err != nil {
-			res = fmt.Sprintf("Error: %v", err)
-		}
-		aftermsgfunc(human, err)
-		sess.AddMessage(
-			openai.ToolMessage(
-				res, tc.ID,
-			),
-		)
-
-		if ctx.Err() != nil {
-			interrupted = true // 工具执行期间被中断：剩余工具在下一轮循环标记为 Aborted
-		}
-	}
-	if interrupted {
-		return ErrInterrupted
-	}
-	return nil
-}
-
-func (a *PathAgent) Destroy() {
-	for i := range a.Tools {
-		a.Tools[i].Destroy()
-	}
-}
-
-func (a *PathAgent) GetName() string {
-	return a.Name
+	return nil, false
 }
 
 func (a *PathAgent) AddTool(tool tool.Tool) bool {
@@ -359,6 +202,20 @@ func (a *PathAgent) RemoveTool(name string) bool {
 		}
 	}
 	return false // 未找到要移除的工具
+}
+
+func (a *PathAgent) GetInitLLMSession(name string) *session.LLMSession {
+	res := session.LLMSession{}
+	res.SetSessionName(name)
+	res.AddMessage(openai.SystemMessage(a.SysPrompt))
+	return &res
+}
+
+// Destroy 释放加载的资源（Lua 工具组的 LState），只能调用一次。
+func (a *PathAgent) Destroy() {
+	for i := range a.Tools {
+		a.Tools[i].Destroy()
+	}
 }
 
 // 检查接口实现

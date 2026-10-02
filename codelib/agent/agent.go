@@ -1,10 +1,8 @@
 package agent
 
 import (
-	"context"
 	"errors"
 
-	"qmicode-go/codelib/modelconfig"
 	"qmicode-go/codelib/session"
 	"qmicode-go/codelib/tool"
 
@@ -15,22 +13,33 @@ import (
 // 调用方可用 errors.Is(err, agent.ErrInterrupted) 区分"用户中断"与真正的错误。
 var ErrInterrupted = errors.New("interrupted by user")
 
+// ToolCall 工具调用类型。目前是 OpenAI ChatCompletionMessageToolCall 的别名；
+// 将来若引入非 OpenAI Runtime / 中立消息模型，替换为自有结构体即可平滑过渡。
+type ToolCall = openai.ChatCompletionMessageToolCall
+
 type ChunkResultFuncCallback func(string, LLMChunkContentType)
 type PreMsgFilterFuncCallback func(string, error) bool
 type AfterMsgFuncCallback func(string, error)
 
+// Agent 定义层：提示词的加载与工具的定义/注册。
+// 不包含任何执行逻辑（LLM 请求、工具调度等属于 AgentRuntime）。
 type Agent interface {
-	GetInitLLMSession(name string) *session.LLMSession
-	// Request 发起一次流式对话。ctx 被取消时立即停止，并把已产出的部分输出保留为一条 assistant message（若有任何产出）。
-	Request(ctx context.Context, config modelconfig.ModelConfig, sess *session.LLMSession, result ChunkResultFuncCallback) ([]openai.ChatCompletionMessageToolCall, error)
-	// ExecuteTools 依次执行工具调用。ctx 被取消时，当前及后续的工具都会被标记为 Aborted（写入对应 tool message），保证会话一致性。
-	ExecuteTools(ctx context.Context, tcs []openai.ChatCompletionMessageToolCall, sess *session.LLMSession, premsgfunc PreMsgFilterFuncCallback, aftermsgfunc AfterMsgFuncCallback) error
-	// Compact 压缩上下文。ctx 被取消时立即停止，不修改会话状态。
-	Compact(ctx context.Context, config modelconfig.ModelConfig, sess *session.LLMSession, result ChunkResultFuncCallback) error
-	Destroy()
-
 	GetName() string
 
-	AddTool(tool.Tool) bool      // true: add success, false: add failed or already exist
-	RemoveTool(name string) bool // true: exist and remove success, false: not exist or remove failed
+	// GetSysPrompt / GetCompactPrompt 返回已加载的系统提示词 / 压缩提示词。
+	GetSysPrompt() string
+	GetCompactPrompt() string
+
+	// ListTools 返回当前全部可用工具（含动态注册的工具）的统一视图。
+	ListTools() []tool.Tool
+	// FindTool 按名称查找工具。
+	FindTool(name string) (tool.Tool, bool)
+	AddTool(tool tool.Tool) bool      // true: add success, false: add failed or already exist
+	RemoveTool(name string) bool     // true: exist and remove success, false: not exist or remove failed
+
+	// GetInitLLMSession 基于本 Agent 的系统提示词创建一个初始会话。
+	GetInitLLMSession(name string) *session.LLMSession
+
+	// Destroy 释放加载的资源（工具实现等），只能调用一次。
+	Destroy()
 }

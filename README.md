@@ -14,9 +14,10 @@ TODO
 
 ## 4. 核心概念
 
-项目主要分为5个核心概念：
+项目主要分为6个核心概念：
 
-1. Agent：定义了模型上下文的系统提示词和工具（见Agent包）
+1. Agent：定义了模型上下文的系统提示词和工具（见agent包）
+2. AgentRuntime：定义了模型的运行时环境，例如OpenAIRuntime（见agent包）
 2. LLMSession：一次对话的上下文（见session包）
 3. LLMTool：模型可用的工具，由Go的.so插件动态加载（见tool包）
 4. ModelConfig: 模型的配置，包括BaseURL、APIKEY等（见modelconfig包）

@@ -118,6 +118,8 @@ func Start() {
 
 	defer general_agent.Destroy()
 
+	rt := agent.NewAgentRuntime(general_agent)
+
 	sess := general_agent.GetInitLLMSession(time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05"))
 
 	var modelConfig coremc.ModelConfig
@@ -216,13 +218,13 @@ FinishMcpConnect:
 
 		history.Add(prompt)
 
-		if !process_special_input(conf, prompt, general_agent, sess, &modelConfig, &safeConfig) {
+		if !process_special_input(conf, prompt, rt, sess, &modelConfig, &safeConfig) {
 			continue
 		}
 
 		sess.AddMessage(openai.UserMessage(prompt))
 
-		if err := runAgentLoop(general_agent, &modelConfig, sess, conf); errors.Is(err, agent.ErrInterrupted) {
+		if err := runAgentLoop(rt, &modelConfig, sess, conf); errors.Is(err, agent.ErrInterrupted) {
 			fmt.Printf("\n%s[Interrupted]%s Session saved.%s\n", Yellow, Reset, Reset)
 		}
 
