@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"qmicode-go/app/luatool"
 	core "qmicode-go/codelib/agent"
 	"qmicode-go/codelib/session"
 	"qmicode-go/codelib/tool"
@@ -49,7 +50,7 @@ type PathAgent struct {
 
 	SysPrompt  string
 	CptPrompt  string
-	Tools      []tool.LuaToolGroup
+	Tools      []luatool.LuaToolGroup
 	ExtraTools []tool.Tool
 }
 
@@ -88,7 +89,7 @@ func LoadPathAgent(agentPath string, name string) (*PathAgent, error) {
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".lua") {
 			path := filepath.Join(agent.ToolsPath, entry.Name())
-			group, err := tool.LoadToolsFromScript(path)
+			group, err := luatool.LoadToolsFromScript(path)
 			if err != nil {
 				agent.Destroy()
 				return &agent, fmt.Errorf("failed to load tools %s: %v", path, err)

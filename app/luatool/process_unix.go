@@ -1,6 +1,6 @@
 //go:build !windows
 
-package tool
+package luatool
 
 import (
 	"os/exec"

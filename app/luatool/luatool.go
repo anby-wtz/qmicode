@@ -1,8 +1,10 @@
-package tool
+package luatool
 
 import (
 	"context"
 	"fmt"
+
+	tool "qmicode-go/codelib/tool"
 
 	"github.com/openai/openai-go"
 	luar "github.com/oscarhealth/gopher-luar"
@@ -44,7 +46,7 @@ type LuaLLMTool struct {
 }
 
 // 检查是否正确实现接口
-var _ Tool = (*LuaLLMTool)(nil)
+var _ tool.Tool = (*LuaLLMTool)(nil)
 
 func (t *LuaLLMTool) GetName() string {
 	return t.Name

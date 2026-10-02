@@ -1,4 +1,4 @@
-package tool
+package luatool
 
 import (
 	"context"
