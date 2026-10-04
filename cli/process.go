@@ -36,6 +36,8 @@ var ORDER = map[string]string{
 	"ORDER_SHOW_SESSION":          "/shsess",
 	"ORDER_LIST_SESSION":          "/lssess",
 	"ORDER_LOAD_SESSION":          "/lsess",
+	"ORDER_LOAD_AGENT":            "/lagent",
+	"ORDER_LIST_AGENT":            "/lsagent",
 }
 
 const (
@@ -187,7 +189,7 @@ func process_special_input(conf config.Config, input string, rt agent.AgentRunti
 		return false
 
 	case ORDER["ORDER_COMPACT"]:
-		if err := rt.Compact(context.Background(), *model, sess, resCallback); err != nil {
+		if err := rt.Compact(context.Background(), currentAgent, *model, sess, resCallback); err != nil {
 			if errors.Is(err, agent.ErrInterrupted) {
 				fmt.Printf("\n%s[Interrupted]%s Compact aborted, session unchanged.%s\n", Yellow, Reset, Reset)
 			} else {
@@ -241,6 +243,40 @@ func process_special_input(conf config.Config, input string, rt agent.AgentRunti
 		}
 		fmt.Print("\f\n")              // 清屏
 		fmt.Printf("%s%s\n", s, Reset) // 重新打印会话内容
+		return false
+
+	case ORDER["ORDER_LOAD_AGENT"]:
+		name, err := getOneLine("name: ")
+		if err != nil {
+			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
+			return false
+		}
+		err = updateCurrentAgent(&conf, name)
+		if err != nil {
+			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
+			return false
+		}
+		sess.SetSystemMessage(currentAgent.GetSysPrompt())
+		return false
+
+	case ORDER["ORDER_LIST_AGENT"]:
+		names, err := conf.ListAgents()
+		if err != nil {
+			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
+			return false
+		}
+		fmt.Print(Yellow)
+		for i := range names {
+			fmt.Print(names[i])
+			if names[i] == currentAgentName {
+				fmt.Print(Green)
+				fmt.Print("*(current)")
+				fmt.Print(Reset)
+				fmt.Print(Yellow)
+			}
+			fmt.Println()
+		}
+		fmt.Print(Reset)
 		return false
 
 	case ORDER_DEBUG_SHOW_SESSION:

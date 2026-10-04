@@ -14,16 +14,16 @@ import (
 	"github.com/openai/openai-go/packages/param"
 )
 
-// AgentRuntime 执行层：基于某个 Agent（提示词 + 工具定义）对一次会话进行 LLM 请求与工具调度。
-// Runtime 不持有任何资源，无生命周期方法；ModelConfig 在每次调用模型时传入，
-// 因此 Agent、ModelConfig、Runtime 三者可任意插拔组合。
+// AgentRuntime 执行层：对一次会话进行 LLM 请求与工具调度。
+// Runtime 自身完全无状态、不持有资源、无生命周期方法：Agent 与 ModelConfig
+// 都在每次调用时传入，因此 Agent、ModelConfig、Runtime 三者严格正交、可任意插拔。
 type AgentRuntime interface {
 	// Request 发起一次流式对话。ctx 被取消时立即停止，并把已产出的部分输出保留为一条 assistant message（若有任何产出）。
-	Request(ctx context.Context, config modelconfig.ModelConfig, sess *session.LLMSession, result ChunkResultFuncCallback) ([]ToolCall, error)
+	Request(ctx context.Context, ag Agent, config modelconfig.ModelConfig, sess *session.LLMSession, result ChunkResultFuncCallback) ([]ToolCall, error)
 	// ExecuteTools 依次执行工具调用。ctx 被取消时，当前及后续的工具都会被标记为 Aborted（写入对应 tool message），保证会话一致性。
-	ExecuteTools(ctx context.Context, tcs []ToolCall, sess *session.LLMSession, premsgfunc PreMsgFilterFuncCallback, aftermsgfunc AfterMsgFuncCallback) error
+	ExecuteTools(ctx context.Context, ag Agent, tcs []ToolCall, sess *session.LLMSession, premsgfunc PreMsgFilterFuncCallback, aftermsgfunc AfterMsgFuncCallback) error
 	// Compact 压缩上下文。ctx 被取消时立即停止，不修改会话状态。
-	Compact(ctx context.Context, config modelconfig.ModelConfig, sess *session.LLMSession, result ChunkResultFuncCallback) error
+	Compact(ctx context.Context, ag Agent, config modelconfig.ModelConfig, sess *session.LLMSession, result ChunkResultFuncCallback) error
 }
 
 type LLMChunkContentType int
@@ -34,15 +34,15 @@ const (
 )
 
 // NewAgentRuntime 创建一个基于 OpenAI Chat Completions API 协议的默认 Runtime。
-func NewAgentRuntime(ag Agent) *OpenAIRuntime {
-	return &OpenAIRuntime{agent: ag}
+// 不接收任何依赖：Agent 与 ModelConfig 均由调用方在每次调用时传入。
+func NewAgentRuntime() *OpenAIRuntime {
+	return &OpenAIRuntime{}
 }
 
 // OpenAIRuntime 是基于 OpenAI Chat Completions API 的 Runtime 实现，
-// 负责 LLM 流式请求、chunk 分发与工具调度；提示词和工具均取自所绑定的 Agent。
-type OpenAIRuntime struct {
-	agent Agent
-}
+// 负责 LLM 流式请求、chunk 分发与工具调度。它是无状态的：
+// 提示词与工具一律取自每次调用传入的 Agent，不保存任何引用。
+type OpenAIRuntime struct{}
 
 // 检查接口实现
 var _ AgentRuntime = (*OpenAIRuntime)(nil)
@@ -111,15 +111,15 @@ func (r *OpenAIRuntime) collectStream(
 	return &msg, usage, nil
 }
 
-func (r *OpenAIRuntime) buildTools() []openai.ChatCompletionToolParam {
+func (r *OpenAIRuntime) buildTools(ag Agent) []openai.ChatCompletionToolParam {
 	openaiTools := make([]openai.ChatCompletionToolParam, 0)
-	for _, t := range r.agent.ListTools() {
+	for _, t := range ag.ListTools() {
 		openaiTools = append(openaiTools, t.ToOpenAITool())
 	}
 	return openaiTools
 }
 
-func (r *OpenAIRuntime) Request(ctx context.Context, config modelconfig.ModelConfig, sess *session.LLMSession, result ChunkResultFuncCallback) ([]ToolCall, error) {
+func (r *OpenAIRuntime) Request(ctx context.Context, ag Agent, config modelconfig.ModelConfig, sess *session.LLMSession, result ChunkResultFuncCallback) ([]ToolCall, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -134,7 +134,7 @@ func (r *OpenAIRuntime) Request(ctx context.Context, config modelconfig.ModelCon
 		prevCallback(s, t)
 	}
 
-	msg, usage, err := r.collectStream(client, ctx, config, sess.Messages, r.buildTools(), result)
+	msg, usage, err := r.collectStream(client, ctx, config, sess.Messages, r.buildTools(ag), result)
 	if err != nil {
 		if errors.Is(err, ErrInterrupted) && partialContent != "" {
 			// 用户中断：保留已产出的部分输出为一条 assistant message（不保存未完成的 tool_calls，避免产生非法会话）
@@ -154,7 +154,7 @@ func (r *OpenAIRuntime) Request(ctx context.Context, config modelconfig.ModelCon
 	return nil, nil
 }
 
-func (r *OpenAIRuntime) ExecuteTools(ctx context.Context, ts []ToolCall, sess *session.LLMSession, premsgfunc PreMsgFilterFuncCallback, aftermsgfunc AfterMsgFuncCallback) error {
+func (r *OpenAIRuntime) ExecuteTools(ctx context.Context, ag Agent, ts []ToolCall, sess *session.LLMSession, premsgfunc PreMsgFilterFuncCallback, aftermsgfunc AfterMsgFuncCallback) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -172,7 +172,7 @@ func (r *OpenAIRuntime) ExecuteTools(ctx context.Context, ts []ToolCall, sess *s
 			continue
 		}
 
-		t, ok := r.agent.FindTool(tc.Function.Name)
+		t, ok := ag.FindTool(tc.Function.Name)
 		if !ok {
 			sess.AddMessage(openai.ToolMessage(fmt.Sprintf("Error: tool %s not found", tc.Function.Name), tc.ID))
 			continue
@@ -205,7 +205,7 @@ func (r *OpenAIRuntime) ExecuteTools(ctx context.Context, ts []ToolCall, sess *s
 	return nil
 }
 
-func (r *OpenAIRuntime) Compact(ctx context.Context, config modelconfig.ModelConfig, sess *session.LLMSession, result ChunkResultFuncCallback) error {
+func (r *OpenAIRuntime) Compact(ctx context.Context, ag Agent, config modelconfig.ModelConfig, sess *session.LLMSession, result ChunkResultFuncCallback) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -216,7 +216,7 @@ func (r *OpenAIRuntime) Compact(ctx context.Context, config modelconfig.ModelCon
 	}
 
 	msg, _, err := r.collectStream(client, ctx, config, []openai.ChatCompletionMessageParamUnion{
-		openai.SystemMessage(r.agent.GetCompactPrompt()),
+		openai.SystemMessage(ag.GetCompactPrompt()),
 		openai.UserMessage(msgstr),
 	}, nil, result)
 	if err != nil {
@@ -226,7 +226,7 @@ func (r *OpenAIRuntime) Compact(ctx context.Context, config modelconfig.ModelCon
 
 	sess.AddCompactMessage(msg.Content)
 	sess.ClearMessages()
-	sess.AddMessage(openai.SystemMessage(r.agent.GetSysPrompt()))
+	sess.AddMessage(openai.SystemMessage(ag.GetSysPrompt()))
 
 	// 压缩信息已经在上文中增加，这里只需要向 Message 中增加即可
 	sess.AddMessageOnlyForLLM(openai.UserMessage("What did we do so far?"))

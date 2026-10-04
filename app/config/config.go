@@ -89,3 +89,16 @@ func (config *Config) GetSessionPath(sessName string) string {
 func (config *Config) GetAgentMcpConfigFilePath(agentName string) string {
 	return filepath.Join(config.GetAgentPath(agentName), config.McpConfigFileName)
 }
+
+func (config *Config) ListAgents() ([]string, error) {
+	dir, err := os.Open(filepath.Join(config.WorkDir, config.AgentsDir))
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	entries, err := dir.Readdirnames(-1)
+	if err != nil {
+		return nil, err
+	}
+	return entries, nil
+}

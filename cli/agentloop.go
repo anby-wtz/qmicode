@@ -22,7 +22,7 @@ import (
 //   - Lua 工具的子进程（exec_with_timeout 使用同一 ctx）
 //
 // 返回 agent.ErrInterrupted 表示被用户 Ctrl-C 中断；其余 error 为真实错误。
-func runAgentLoop(rt agent.AgentRuntime, model *coremc.ModelConfig, sess *session.LLMSession, conf config.Config) (err error) {
+func runAgentLoop(rt agent.AgentRuntime, ag agent.Agent, model *coremc.ModelConfig, sess *session.LLMSession, conf config.Config) (err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sigCh := make(chan os.Signal, 4)
@@ -42,7 +42,7 @@ func runAgentLoop(rt agent.AgentRuntime, model *coremc.ModelConfig, sess *sessio
 		defer cancel() // 无论成功失败，确保资源释放
 
 		for {
-			tcs, err := rt.Request(ctx, *model, sess, resCallback)
+			tcs, err := rt.Request(ctx, ag, *model, sess, resCallback)
 			if ctx.Err() != nil {
 				err = agent.ErrInterrupted // Request 中断时已把部分输出保留进会话
 			}
@@ -51,7 +51,7 @@ func runAgentLoop(rt agent.AgentRuntime, model *coremc.ModelConfig, sess *sessio
 				return
 			}
 
-			err = rt.ExecuteTools(ctx, tcs, sess, premsgCallback, aftermsgCallback)
+			err = rt.ExecuteTools(ctx, ag, tcs, sess, premsgCallback, aftermsgCallback)
 			if ctx.Err() != nil && !errors.Is(err, agent.ErrInterrupted) {
 				err = agent.ErrInterrupted
 			}

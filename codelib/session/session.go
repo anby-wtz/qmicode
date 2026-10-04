@@ -116,12 +116,11 @@ func (sess *LLMSession) ClearMessages() {
 }
 
 func (sess *LLMSession) SetSystemMessage(content string) {
-	// check if system message already exists
-	// 只有第一个是system message
+	// 第一个一定是系统提示词
 
-	if len(sess.Messages) > 0 && *sess.Messages[0].GetRole() == "system" {
+	if len(sess.Messages) > 0 {
 		sess.Messages[0] = openai.SystemMessage(content)
 		data, _ := json.Marshal(sess.Messages[0])
-		sess.EntireMessages[0] = LLMMessageUnion(LLMMessageUnion(data))
+		sess.EntireMessages[0] = LLMMessageUnion(data)
 	}
 }

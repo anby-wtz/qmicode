@@ -134,7 +134,8 @@ func updateCurrentAgent(conf *config.Config, name string) error {
 func Start() {
 	conf := config.DefaultConfig
 
-	err := updateCurrentAgent(&conf, conf.GeneralAgentName)
+	// err := updateCurrentAgent(&conf, conf.GeneralAgentName)
+	err := updateCurrentAgent(&conf, "plan")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%sFailed: %v%s\n", Red, err, Reset)
 		os.Exit(1)
@@ -142,7 +143,7 @@ func Start() {
 
 	defer currentAgent.Destroy()
 
-	rt := agent.NewAgentRuntime(currentAgent)
+	rt := agent.NewAgentRuntime()
 
 	sess := currentAgent.GetInitLLMSession(time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05"))
 
@@ -228,7 +229,7 @@ FinishMcpConnect:
 
 		sess.AddMessage(openai.UserMessage(prompt))
 
-		if err := runAgentLoop(rt, &modelConfig, sess, conf); errors.Is(err, agent.ErrInterrupted) {
+		if err := runAgentLoop(rt, currentAgent, &modelConfig, sess, conf); errors.Is(err, agent.ErrInterrupted) {
 			fmt.Printf("\n%s[Interrupted]%s Session saved.%s\n", Yellow, Reset, Reset)
 		}
 
