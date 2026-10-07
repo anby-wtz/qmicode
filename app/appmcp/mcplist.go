@@ -11,10 +11,13 @@ mcp config via yaml file
 
 remote:
   - name: test
-  - endpoint: https://example.com/mcp
+    endpoint: https://example.com/mcp
 local:
   - name: test
-  - cmd: ./mymcp
+    cmd: ./mymcp
+    args:
+	 - arg1
+	 - arg2
 
 */
 
@@ -24,8 +27,9 @@ type McpListConfig struct {
 		Endpoint string `yaml:"endpoint"`
 	} `yaml:"remote"`
 	Local []struct {
-		Name string `yaml:"name"`
-		Cmd  string `yaml:"cmd"`
+		Name string   `yaml:"name"`
+		Cmd  string   `yaml:"cmd"`
+		Args []string `yaml:"args"`
 	} `yaml:"local"`
 }
 

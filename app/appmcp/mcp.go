@@ -9,14 +9,14 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func ConnectLocalMcp(ctx context.Context, name string, cmd string, workdir string) (*mcp.ClientSession, error) {
+func ConnectLocalMcp(ctx context.Context, name string, cmd string, args []string, workdir string) (*mcp.ClientSession, error) {
 	client := mcp.NewClient(
 		&mcp.Implementation{
 			Name: name,
 		},
 		nil,
 	)
-	c := exec.Command(cmd)
+	c := exec.Command(cmd, args...)
 	c.Dir = workdir
 	session, err := client.Connect(
 		ctx,
@@ -98,6 +98,7 @@ type RemoteMcpConfig struct {
 type LocalMcpConfig struct {
 	Name    string
 	Command string
+	Args    []string
 	Workdir string
 }
 
@@ -131,7 +132,7 @@ func ConfigAllMcp(ctx context.Context, remote []*RemoteMcpConfig, local []*Local
 		if connectCallBack != nil {
 			connectCallBack(McpTypeLocal, l.Name)
 		}
-		sess, err := ConnectLocalMcp(ctx, l.Name, l.Command, l.Workdir)
+		sess, err := ConnectLocalMcp(ctx, l.Name, l.Command, l.Args, l.Workdir)
 		if err != nil {
 			return err
 		}

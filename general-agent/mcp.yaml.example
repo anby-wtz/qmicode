@@ -4,6 +4,9 @@
 # local:
 #   - name: test
 #     cmd: ./mymcp
+#     args: 
+#      - arg1
+#      - arg2
 
 remote:
 local:

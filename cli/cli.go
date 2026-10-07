@@ -134,8 +134,7 @@ func updateCurrentAgent(conf *config.Config, name string) error {
 func Start() {
 	conf := config.DefaultConfig
 
-	// err := updateCurrentAgent(&conf, conf.GeneralAgentName)
-	err := updateCurrentAgent(&conf, "plan")
+	err := updateCurrentAgent(&conf, conf.GeneralAgentName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%sFailed: %v%s\n", Red, err, Reset)
 		os.Exit(1)
@@ -179,6 +178,7 @@ func Start() {
 		localList[i] = &appmcp.LocalMcpConfig{
 			Name:    v.Name,
 			Command: v.Cmd,
+			Args:    v.Args,
 			Workdir: conf.GetAgentPath(conf.GeneralAgentName),
 		}
 	}
