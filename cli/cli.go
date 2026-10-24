@@ -128,31 +128,11 @@ func updateCurrentAgent(conf *config.Config, name string) error {
 	}
 	currentAgent = agent
 	currentAgentName = name
-	return nil
+
+	return loadMcp(conf)
 }
 
-func Start() {
-	conf := config.DefaultConfig
-
-	err := updateCurrentAgent(&conf, conf.GeneralAgentName)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%sFailed: %v%s\n", Red, err, Reset)
-		os.Exit(1)
-	}
-
-	defer currentAgent.Destroy()
-
-	rt := agent.NewAgentRuntime()
-
-	sess := currentAgent.GetInitLLMSession(time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05"))
-
-	var modelConfig coremc.ModelConfig
-
-	currentModelName, err = appmc.LoadDefaultModel(&modelConfig, conf)
-	if err != nil {
-		fmt.Printf("%sLoad Default Model Failed: %v. Please Set You Model By `/setmodel`%s\n", Red, err, Reset)
-	}
-
+func loadMcp(conf *config.Config) error {
 	mcpConfig, err := appmcp.GetMcpListConfigFromFile(
 		conf.GetAgentMcpConfigFilePath(conf.GeneralAgentName),
 	)
@@ -162,7 +142,7 @@ func Start() {
 
 	if err != nil {
 		fmt.Printf("%sLoad MCP Config Failed: %v%s\n", Red, err, Reset)
-		goto FinishMcpConnect // we can't directly exit just because of mcp failure.
+		return err
 	}
 
 	remoteList = make([]*appmcp.RemoteMcpConfig, len(mcpConfig.Remote))
@@ -200,10 +180,33 @@ func Start() {
 
 	if err != nil {
 		fmt.Printf("%sFailed to connect to MCP: %v%s\n", Red, err, Reset)
-		goto FinishMcpConnect
+		return err
 	}
 
-FinishMcpConnect:
+	return nil
+}
+
+func Start() {
+	conf := config.DefaultConfig
+
+	err := updateCurrentAgent(&conf, conf.GeneralAgentName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%sFailed: %v%s\n", Red, err, Reset)
+		os.Exit(1)
+	}
+
+	defer currentAgent.Destroy()
+
+	rt := agent.NewAgentRuntime()
+
+	sess := currentAgent.GetInitLLMSession(time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05"))
+
+	var modelConfig coremc.ModelConfig
+
+	currentModelName, err = appmc.LoadDefaultModel(&modelConfig, conf)
+	if err != nil {
+		fmt.Printf("%sLoad Default Model Failed: %v. Please Set You Model By `/setmodel`%s\n", Red, err, Reset)
+	}
 
 	err = safeConfig.LoadFromDefault(conf)
 	if err != nil {
