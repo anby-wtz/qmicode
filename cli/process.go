@@ -38,6 +38,7 @@ var ORDER = map[string]string{
 	"ORDER_LOAD_SESSION":          "/lsess",
 	"ORDER_LOAD_AGENT":            "/lagent",
 	"ORDER_LIST_AGENT":            "/lsagent",
+	"ORDER_UNDO":                  "/undo", // undo last message
 }
 
 const (
@@ -277,6 +278,14 @@ func process_special_input(conf config.Config, input string, rt agent.AgentRunti
 			fmt.Println()
 		}
 		fmt.Print(Reset)
+		return false
+
+	case ORDER["ORDER_UNDO"]:
+		if err := sess.Undo(); err != nil {
+			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
+			return false
+		}
+		fmt.Printf("%sUndo Complete!%s\n", Green, Reset)
 		return false
 
 	case ORDER_DEBUG_SHOW_SESSION:

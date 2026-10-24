@@ -124,3 +124,29 @@ func (sess *LLMSession) SetSystemMessage(content string) {
 		sess.EntireMessages[0] = LLMMessageUnion(data)
 	}
 }
+
+func (sess *LLMSession) Undo() error {
+	n := len(sess.Messages)
+	if n == 0 {
+		return fmt.Errorf("no messages to undo")
+	}
+	last := sess.Messages[n-1]
+	switch {
+	case last.OfAssistant != nil:
+		// 删 assistant + 前一条
+		if n >= 2 {
+			sess.Messages[n-1] = openai.ChatCompletionMessageParamUnion{}
+			sess.Messages[n-2] = openai.ChatCompletionMessageParamUnion{}
+			sess.Messages = sess.Messages[:n-2]
+		}
+		return nil
+	case last.OfUser != nil:
+		// 只删 user
+		sess.Messages[n-1] = openai.ChatCompletionMessageParamUnion{}
+		sess.Messages = sess.Messages[:n-1]
+		return nil
+	default:
+		// 最后一条是 system / tool 等，不处理
+		return fmt.Errorf("cannot undo last message")
+	}
+}
