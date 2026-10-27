@@ -54,10 +54,20 @@ func (save *SafeConfig) LoadFromDefault(conf config.Config) error {
 	if err != nil {
 		return err
 	}
-	if data["safe"] == nil {
+	// safe 缺失或字段不全时，直接类型断言会 panic，这里逐层做安全检查
+	safeRaw, ok := data["safe"].(map[string]any)
+	if !ok {
 		return fmt.Errorf("no default safe config set")
 	}
-	save.Environment = SafeEnvironment(data["safe"].(map[string]any)["environment"].(int))
-	save.NeedConfirm = data["safe"].(map[string]any)["needConfirm"].(bool)
+	envRaw, ok := safeRaw["environment"].(int)
+	if !ok {
+		return fmt.Errorf("invalid safe environment")
+	}
+	needConfirmRaw, ok := safeRaw["needConfirm"].(bool)
+	if !ok {
+		return fmt.Errorf("invalid safe needConfirm")
+	}
+	save.Environment = SafeEnvironment(envRaw)
+	save.NeedConfirm = needConfirmRaw
 	return nil
 }

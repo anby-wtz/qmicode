@@ -18,6 +18,10 @@ type Config struct {
 	McpConfigFileName string
 }
 
+// mcpConfigFileName 是 agent 目录下 MCP 配置的默认文件名。
+// 同时被 DefaultConfig.McpConfigFileName 与 EnsureMcpConfig 使用，保持单一来源。
+const mcpConfigFileName = "mcp.yaml"
+
 var DefaultConfig = Config{
 	AgentsDir:             "agents",
 	GeneralAgentName:      "general",
@@ -25,7 +29,7 @@ var DefaultConfig = Config{
 	SessionDir:            "sessions",
 	GeneralConfigFileName: "config.yaml",
 
-	McpConfigFileName: "mcp.yaml",
+	McpConfigFileName: mcpConfigFileName,
 }
 
 func init() {
@@ -88,6 +92,26 @@ func (config *Config) GetSessionPath(sessName string) string {
 
 func (config *Config) GetAgentMcpConfigFilePath(agentName string) string {
 	return filepath.Join(config.GetAgentPath(agentName), config.McpConfigFileName)
+}
+
+// EnsureMcpConfig 确保 agent 目录下存在 mcp.yaml。
+// 若缺失则从 mcp.yaml.example 复制；示例也不存在时写入一个空的 mcp 配置，
+// 避免 loadMcp 因文件不存在而让整个 CLI 无法启动。
+func EnsureMcpConfig(agentPath string) error {
+	mcpPath := filepath.Join(agentPath, mcpConfigFileName)
+
+	if _, err := os.Stat(mcpPath); err == nil {
+		return nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+
+	examplePath := mcpPath + ".example"
+	if data, err := os.ReadFile(examplePath); err == nil {
+		return os.WriteFile(mcpPath, data, 0644)
+	}
+
+	return os.WriteFile(mcpPath, []byte("remote:\nlocal:\n"), 0644)
 }
 
 func (config *Config) ListAgents() ([]string, error) {

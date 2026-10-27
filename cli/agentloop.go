@@ -9,11 +9,9 @@ import (
 	"sync"
 	"syscall"
 
-	"qmicode-go/app/config"
 	appsess "qmicode-go/app/session"
+	"qmicode-go/cli/appstate"
 	"qmicode-go/codelib/agent"
-	coremc "qmicode-go/codelib/modelconfig"
-	"qmicode-go/codelib/session"
 )
 
 // runAgentLoop 执行一轮完整的 Agent 循环（LLM 请求 + 工具调用）。
@@ -22,7 +20,7 @@ import (
 //   - Lua 工具的子进程（exec_with_timeout 使用同一 ctx）
 //
 // 返回 agent.ErrInterrupted 表示被用户 Ctrl-C 中断；其余 error 为真实错误。
-func runAgentLoop(rt agent.AgentRuntime, ag agent.Agent, model *coremc.ModelConfig, sess *session.LLMSession, conf config.Config) (err error) {
+func runAgentLoop(app *appstate.App) (err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sigCh := make(chan os.Signal, 4)
@@ -42,7 +40,7 @@ func runAgentLoop(rt agent.AgentRuntime, ag agent.Agent, model *coremc.ModelConf
 		defer cancel() // 无论成功失败，确保资源释放
 
 		for {
-			tcs, err := rt.Request(ctx, ag, *model, sess, resCallback)
+			tcs, err := app.Rt.Request(ctx, app.Ag, app.Model, app.Sess, resCallback)
 			if ctx.Err() != nil {
 				err = agent.ErrInterrupted // Request 中断时已把部分输出保留进会话
 			}
@@ -51,12 +49,12 @@ func runAgentLoop(rt agent.AgentRuntime, ag agent.Agent, model *coremc.ModelConf
 				return
 			}
 
-			err = rt.ExecuteTools(ctx, ag, tcs, sess, premsgCallback, aftermsgCallback)
+			err = app.Rt.ExecuteTools(ctx, app.Ag, tcs, app.Sess, premsgCallback(app), aftermsgCallback)
 			if ctx.Err() != nil && !errors.Is(err, agent.ErrInterrupted) {
 				err = agent.ErrInterrupted
 			}
 
-			appsess.SaveSession(conf, sess)
+			appsess.SaveSession(app.Conf, app.Sess)
 
 			if err != nil {
 				done <- err

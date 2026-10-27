@@ -98,9 +98,14 @@ func LoadDefaultModel(model *coremc.ModelConfig, conf config.Config) (string, er
 	if err != nil {
 		return "", err
 	}
-	defaultModelName := data["defaultModel"]
-	if defaultModelName == "" {
+	// 未设置时 data["defaultModel"] 为 nil，直接类型断言会 panic
+	raw, ok := data["defaultModel"]
+	if !ok || raw == nil {
 		return "", fmt.Errorf("no default model set")
 	}
-	return defaultModelName.(string), Load(model, conf, defaultModelName.(string))
+	defaultModelName, ok := raw.(string)
+	if !ok || defaultModelName == "" {
+		return "", fmt.Errorf("no default model set")
+	}
+	return defaultModelName, Load(model, conf, defaultModelName)
 }

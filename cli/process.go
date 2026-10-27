@@ -1,22 +1,12 @@
 package cli
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"io"
-	"os"
+	"strings"
 
-	"qmicode-go/app/config"
-	appmc "qmicode-go/app/modelconfig"
-	clisafe "qmicode-go/app/safe"
-	appsess "qmicode-go/app/session"
-	"qmicode-go/codelib/agent"
-	coremc "qmicode-go/codelib/modelconfig"
-	"qmicode-go/codelib/session"
-
-	"github.com/mattn/go-colorable"
-	"github.com/nyaosorg/go-readline-ny"
+	"qmicode-go/cli/appstate"
+	"qmicode-go/cli/command"
+	"qmicode-go/cli/term"
 )
 
 var ORDER = map[string]string{
@@ -43,286 +33,67 @@ const (
 	ORDER_DEBUG_SHOW_SESSION = "/debugshsess"
 )
 
-func getOneLine(prompt string) (string, error) {
-	editor := &readline.Editor{
-		PromptWriter: func(w io.Writer) (int, error) {
-			return io.WriteString(w, fmt.Sprintf("%s%s%s", Cyan, prompt, Reset))
-		},
-		Writer:       colorable.NewColorableStdout(),
-		ResetColor:   Reset,
-		DefaultColor: Green,
-	}
-	return editor.ReadLine(context.Background())
-}
-
-func process_special_input(conf config.Config, input string, rt agent.AgentRuntime, sess *session.LLMSession, model *coremc.ModelConfig, sf *clisafe.SafeConfig) bool {
+// process_special_input 只负责把输入分派给 command 包中对应的处理函数。
+// 返回 true 表示不是命令、应按普通对话继续处理。
+func process_special_input(app *appstate.App, input string) bool {
 	switch input {
 	case ORDER["ORDER_EXIT"], ORDER["ORDER_QUIT"]:
-		fmt.Printf("%sExiting...%s\n", Cyan, Reset)
-		os.Exit(0)
-		return false
+		return command.Exit(app)
 
 	case ORDER["ORDER_SHOW_SESSION_JSON"]:
-		str, err := sess.GetJSON()
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		fmt.Printf("%sSession JSON:%s\n%s\n", Magenta, Reset, str)
-		return false
+		return command.ShowSessionJSON(app)
 
 	case ORDER["ORDER_SET_MODEL"]:
-		name, err := getOneLine("name: ")
-
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-
-		baseURL, err := getOneLine("BaseURL: ")
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		apiKey, err := getOneLine("ApiKey: ")
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		modelName, err := getOneLine("ModelName: ")
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		model.BaseURL = baseURL
-		model.ApiKey = apiKey
-		model.Model = modelName
-
-		err = appmc.Save(model, conf, name)
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-
-		currentModelName = name
-
-		// set model to default
-		err = appmc.SetModelToDefault(conf, name)
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-
-		return false
+		return command.SetModel(app)
 
 	case ORDER["ORDER_LOAD_MODEL"]:
-		name, err := getOneLine("name: ")
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		err = appmc.Load(model, conf, name)
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		currentModelName = name
-
-		// set model to default
-		err = appmc.SetModelToDefault(conf, name)
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		return false
+		return command.LoadModel(app)
 
 	case ORDER["ORDER_LIST_MODEL"]:
-		names, err := appmc.ListModel(conf)
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		fmt.Print(Yellow)
-		for i := range names {
-			fmt.Println(names[i])
-		}
-		fmt.Print(Reset)
-		return false
+		return command.ListModel(app)
 
 	case ORDER["ORDER_REMOVE_MODEL"]:
-		name, err := getOneLine("name: ")
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		err = appmc.RemoveModel(conf, name)
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		// 自动切换到模型列表的第一个模型
-		models, err := appmc.ListModel(conf)
-		if err != nil {
-			// 警告：无法自动切换模型
-			fmt.Printf("%sWarning: Cannot auto switch model%s\n", Yellow, Reset)
-			return false
-		}
-		if len(models) > 0 {
-			err = appmc.Load(model, conf, models[0])
-			if err != nil {
-				fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-				return false
-			}
-			currentModelName = models[0]
-			err = appmc.SetModelToDefault(conf, models[0])
-			if err != nil {
-				fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-				return false
-			}
-		}
-		return false
+		return command.RemoveModel(app)
 
 	case ORDER["ORDER_SHOW_MODEL"]:
-		fmt.Printf("%sBaseURL: %s\nModelName: %s%s\n", Yellow, model.BaseURL, model.Model, Reset)
-		return false
+		return command.ShowModel(app)
 
 	case ORDER["ORDER_SET_SAFE"]:
-		confirmToolCall, err := getOneLine("Do you want confirm every tool call before execute? (y/n): ")
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		if confirmToolCall == "y" || confirmToolCall == "Y" {
-			safeConfig.NeedConfirm = true
-			safeConfig.SaveToDefault(conf)
-			fmt.Printf("%sSet to confirm tool call%s\n", Green, Reset)
-			return false
-		}
-		if confirmToolCall == "n" || confirmToolCall == "N" {
-			safeConfig.NeedConfirm = false
-			safeConfig.SaveToDefault(conf)
-			fmt.Printf("%sSet to not confirm tool call%s\n", Green, Reset)
-			return false
-		}
-		fmt.Printf("%sInvalid input%s\n", Red, Reset)
-		return false
+		return command.SetSafe(app)
 
 	case ORDER["ORDER_SHOW_SAFE"]:
-		fmt.Printf("%sNeedConfirm: %t%s\n", Yellow, sf.NeedConfirm, Reset)
-		return false
+		return command.ShowSafe(app)
 
 	case ORDER["ORDER_COMPACT"]:
-		if err := rt.Compact(context.Background(), currentAgent, *model, sess, resCallback); err != nil {
-			if errors.Is(err, agent.ErrInterrupted) {
-				fmt.Printf("\n%s[Interrupted]%s Compact aborted, session unchanged.%s\n", Yellow, Reset, Reset)
-			} else {
-				fmt.Printf("%sError during compact: %v%s\n", Red, err.Error(), Reset)
-			}
-			return false
-		}
-		fmt.Printf("\n%s%sCompact Complete!%s\n", Green, Bold, Reset)
-		return false
+		return command.Compact(app, resCallback)
 
 	case ORDER["ORDER_SHOW_SESSION"]:
-		fmt.Printf("%sSession name:%s%s\n", Magenta, Reset, sess.Name)
-		return false
+		return command.ShowSession(app)
 
 	case ORDER["ORDER_LIST_SESSION"]:
-		names, err := appsess.ListSessions(conf)
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		fmt.Print(Yellow)
-		for i := range names {
-			fmt.Print(names[i])
-			if names[i] == sess.Name {
-				fmt.Print(Green)
-				fmt.Print("*(current)")
-				fmt.Print(Reset)
-				fmt.Print(Yellow)
-			}
-			fmt.Println()
-		}
-		fmt.Print(Reset)
-		return false
+		return command.ListSession(app)
 
 	case ORDER["ORDER_LOAD_SESSION"]:
-		name, err := getOneLine("name: ")
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		err = appsess.LoadSession(conf, name, sess)
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		fmt.Printf("%sLoaded session: %s%s\n", Green, name, Reset)
-		s, err := MessageList2String(sess)
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		fmt.Print("\f\n")              // 清屏
-		fmt.Printf("%s%s\n", s, Reset) // 重新打印会话内容
-		return false
+		return command.LoadSession(app)
 
 	case ORDER["ORDER_LOAD_AGENT"]:
-		name, err := getOneLine("name: ")
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		err = updateCurrentAgent(&conf, name)
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		sess.SetSystemMessage(currentAgent.GetSysPrompt())
-		return false
+		return command.LoadAgent(app, func(name string) error {
+			return updateCurrentAgent(app, name)
+		})
 
 	case ORDER["ORDER_LIST_AGENT"]:
-		names, err := conf.ListAgents()
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		fmt.Print(Yellow)
-		for i := range names {
-			fmt.Print(names[i])
-			if names[i] == currentAgentName {
-				fmt.Print(Green)
-				fmt.Print("*(current)")
-				fmt.Print(Reset)
-				fmt.Print(Yellow)
-			}
-			fmt.Println()
-		}
-		fmt.Print(Reset)
-		return false
+		return command.ListAgent(app)
 
 	case ORDER["ORDER_UNDO"]:
-		if err := sess.Undo(); err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		fmt.Printf("%sUndo Complete!%s\n", Green, Reset)
-		return false
+		return command.Undo(app)
 
 	case ORDER_DEBUG_SHOW_SESSION:
-		res, err := sess.GetMessageString()
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		fmt.Printf("%sSession:%s\n%+v\n", Magenta, Reset, res)
-		return false
-
+		return command.DebugShowSession(app)
 	}
 
-	if input[0] == '/' {
-		fmt.Printf("%sUnknown Command%s\n", Red, Reset)
+	// 用户直接回车时 input 为空，不能取 input[0]
+	if strings.HasPrefix(input, "/") {
+		fmt.Printf("%sUnknown Command%s\n", term.Red, term.Reset)
 		return false
 	}
 

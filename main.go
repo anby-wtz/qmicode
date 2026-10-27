@@ -22,6 +22,10 @@ func main() {
 				fmt.Fprintf(os.Stderr, "Failed to copy general-agent: %s", err.Error())
 				os.Exit(1)
 			}
+			if err := config.EnsureMcpConfig(generalAgentPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to create mcp config: %s\n", err.Error())
+				os.Exit(1)
+			}
 			fmt.Printf("Install qmicode successfully!\n")
 			os.Exit(0)
 		case "cli":
