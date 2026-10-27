@@ -134,7 +134,7 @@ func updateCurrentAgent(conf *config.Config, name string) error {
 
 func loadMcp(conf *config.Config) error {
 	mcpConfig, err := appmcp.GetMcpListConfigFromFile(
-		conf.GetAgentMcpConfigFilePath(conf.GeneralAgentName),
+		conf.GetAgentMcpConfigFilePath(currentAgentName),
 	)
 
 	var remoteList []*appmcp.RemoteMcpConfig
@@ -159,7 +159,7 @@ func loadMcp(conf *config.Config) error {
 			Name:    v.Name,
 			Command: v.Cmd,
 			Args:    v.Args,
-			Workdir: conf.GetAgentPath(conf.GeneralAgentName),
+			Workdir: conf.GetAgentPath(currentAgentName),
 		}
 	}
 
