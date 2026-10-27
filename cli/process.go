@@ -20,25 +20,23 @@ import (
 )
 
 var ORDER = map[string]string{
-	"ORDER_EXIT":                  "/exit",
-	"ORDER_QUIT":                  "/quit",
-	"ORDER_SHOW_SESSION_JSON":     "/shsejson",
-	"ORDER_SET_MODEL":             "/setmodel",
-	"ORDER_SAVE_MODEL":            "/smodel",
-	"ORDER_LOAD_MODEL":            "/lmodel",
-	"ORDER_LIST_MODEL":            "/lsmodel",
-	"ORDER_REMOVE_MODEL":          "/rmmodel",
-	"ORDER_SHOW_MODEL":            "/shmodel",
-	"ORDER_SAVE_MODEL_TO_DEFAULT": "/smtd",
-	"ORDER_SET_SAFE":              "/setsafe",
-	"ORDER_SHOW_SAFE":             "/shsafe",
-	"ORDER_COMPACT":               "/compact",
-	"ORDER_SHOW_SESSION":          "/shsess",
-	"ORDER_LIST_SESSION":          "/lssess",
-	"ORDER_LOAD_SESSION":          "/lsess",
-	"ORDER_LOAD_AGENT":            "/lagent",
-	"ORDER_LIST_AGENT":            "/lsagent",
-	"ORDER_UNDO":                  "/undo", // undo last message
+	"ORDER_EXIT":              "/exit",
+	"ORDER_QUIT":              "/quit",
+	"ORDER_SHOW_SESSION_JSON": "/shsejson",
+	"ORDER_SET_MODEL":         "/setmodel",
+	"ORDER_LOAD_MODEL":        "/lmodel",
+	"ORDER_LIST_MODEL":        "/lsmodel",
+	"ORDER_REMOVE_MODEL":      "/rmmodel",
+	"ORDER_SHOW_MODEL":        "/shmodel",
+	"ORDER_SET_SAFE":          "/setsafe",
+	"ORDER_SHOW_SAFE":         "/shsafe",
+	"ORDER_COMPACT":           "/compact",
+	"ORDER_SHOW_SESSION":      "/shsess",
+	"ORDER_LIST_SESSION":      "/lssess",
+	"ORDER_LOAD_SESSION":      "/lsess",
+	"ORDER_LOAD_AGENT":        "/lagent",
+	"ORDER_LIST_AGENT":        "/lsagent",
+	"ORDER_UNDO":              "/undo", // undo last message
 }
 
 const (
@@ -74,6 +72,13 @@ func process_special_input(conf config.Config, input string, rt agent.AgentRunti
 		return false
 
 	case ORDER["ORDER_SET_MODEL"]:
+		name, err := getOneLine("name: ")
+
+		if err != nil {
+			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
+			return false
+		}
+
 		baseURL, err := getOneLine("BaseURL: ")
 		if err != nil {
 			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
@@ -92,19 +97,22 @@ func process_special_input(conf config.Config, input string, rt agent.AgentRunti
 		model.BaseURL = baseURL
 		model.ApiKey = apiKey
 		model.Model = modelName
-		return false
 
-	case ORDER["ORDER_SAVE_MODEL"]:
-		name, err := getOneLine("name: ")
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
 		err = appmc.Save(model, conf, name)
 		if err != nil {
 			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
 			return false
 		}
+
+		currentModelName = name
+
+		// set model to default
+		err = appmc.SetModelToDefault(conf, name)
+		if err != nil {
+			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
+			return false
+		}
+
 		return false
 
 	case ORDER["ORDER_LOAD_MODEL"]:
@@ -119,6 +127,13 @@ func process_special_input(conf config.Config, input string, rt agent.AgentRunti
 			return false
 		}
 		currentModelName = name
+
+		// set model to default
+		err = appmc.SetModelToDefault(conf, name)
+		if err != nil {
+			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
+			return false
+		}
 		return false
 
 	case ORDER["ORDER_LIST_MODEL"]:
@@ -145,23 +160,30 @@ func process_special_input(conf config.Config, input string, rt agent.AgentRunti
 			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
 			return false
 		}
+		// 自动切换到模型列表的第一个模型
+		models, err := appmc.ListModel(conf)
+		if err != nil {
+			// 警告：无法自动切换模型
+			fmt.Printf("%sWarning: Cannot auto switch model%s\n", Yellow, Reset)
+			return false
+		}
+		if len(models) > 0 {
+			err = appmc.Load(model, conf, models[0])
+			if err != nil {
+				fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
+				return false
+			}
+			currentModelName = models[0]
+			err = appmc.SetModelToDefault(conf, models[0])
+			if err != nil {
+				fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
+				return false
+			}
+		}
 		return false
 
 	case ORDER["ORDER_SHOW_MODEL"]:
 		fmt.Printf("%sBaseURL: %s\nModelName: %s%s\n", Yellow, model.BaseURL, model.Model, Reset)
-		return false
-
-	case ORDER["ORDER_SAVE_MODEL_TO_DEFAULT"]:
-		name, err := getOneLine("name: ")
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
-		err = appmc.SetModelToDefault(conf, name)
-		if err != nil {
-			fmt.Printf("%sError: %s%s\n", Red, err.Error(), Reset)
-			return false
-		}
 		return false
 
 	case ORDER["ORDER_SET_SAFE"]:
