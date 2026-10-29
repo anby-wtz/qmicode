@@ -30,8 +30,6 @@ func ListAgent(app *appstate.App) bool {
 }
 
 // LoadAgent 处理 /lagent：按名切换 Agent。
-// reload 由 cli 包注入（updateCurrentAgent），因为它需要重建 Agent、重载 MCP 并改写 app 字段，
-// 这些仍属于 cli 层的职责，本次拆分只做转发。
 func LoadAgent(app *appstate.App, reload func(name string) error) bool {
 	name, err := term.Ask("name: ")
 	if err != nil {

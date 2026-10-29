@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
+	"time"
 
 	appsess "qmicode-go/app/session"
 	"qmicode-go/cli/appstate"
@@ -146,6 +148,32 @@ func Undo(app *appstate.App) bool {
 		return false
 	}
 	fmt.Printf("%sUndo Complete!%s\n", term.Green, term.Reset)
+	return false
+}
+
+// RenameSession 处理 /rensess：重命名会话。
+func RenameSession(app *appstate.App) bool {
+	name, err := term.Ask("new name: ")
+	if err != nil {
+		fmt.Printf("%sError: %s%s\n", term.Red, err.Error(), term.Reset)
+	}
+	if err := appsess.RenameSession(app.Conf, app.Sess, name); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			app.Sess.Name = name // 重命名后立即保存
+			appsess.SaveSession(app.Conf, app.Sess)
+			goto T
+		}
+		fmt.Printf("%sError: %s%s\n", term.Red, err.Error(), term.Reset)
+	}
+T:
+	fmt.Printf("%sRenamed session to: %s%s\n", term.Green, name, term.Reset)
+	return false
+}
+
+// NewSession 处理 /newsess：创建新会话。
+func NewSession(app *appstate.App) bool {
+	app.Sess = app.Ag.GetInitLLMSession(time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05"))
+	fmt.Printf("%sNew session created!%s\n", term.Green, term.Reset)
 	return false
 }
 

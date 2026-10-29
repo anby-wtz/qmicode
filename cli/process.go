@@ -24,6 +24,8 @@ var ORDER = map[string]string{
 	"ORDER_SHOW_SESSION":      "/shsess",
 	"ORDER_LIST_SESSION":      "/lssess",
 	"ORDER_LOAD_SESSION":      "/lsess",
+	"ORDER_RENAME_SESSION":    "/rensess",
+	"ORDER_NEW_SESSION":       "/newsess",
 	"ORDER_LOAD_AGENT":        "/lagent",
 	"ORDER_LIST_AGENT":        "/lsagent",
 	"ORDER_UNDO":              "/undo", // undo last message
@@ -75,6 +77,12 @@ func process_special_input(app *appstate.App, input string) bool {
 
 	case ORDER["ORDER_LOAD_SESSION"]:
 		return command.LoadSession(app)
+
+	case ORDER["ORDER_RENAME_SESSION"]:
+		return command.RenameSession(app)
+
+	case ORDER["ORDER_NEW_SESSION"]:
+		return command.NewSession(app)
 
 	case ORDER["ORDER_LOAD_AGENT"]:
 		return command.LoadAgent(app, func(name string) error {
