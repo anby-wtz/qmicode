@@ -24,8 +24,7 @@ func color(role string) string {
 	return ""
 }
 
-// renderMessages 把会话的完整历史（含 compact 记录）渲染为带颜色的文本。
-// 原本是 cli/msg2str.go 的 MessageList2String，仅被 /lsess 使用，故随命令一并迁入。
+// renderMessages 把会话的完整历史（含 compact 记录和 undo 记录）渲染为带颜色的文本。
 func renderMessages(sess *session.LLMSession) (string, error) {
 	data, err := json.Marshal(sess.EntireMessages)
 	if err != nil {
@@ -38,19 +37,24 @@ func renderMessages(sess *session.LLMSession) (string, error) {
 	var res strings.Builder
 
 	for _, msg := range context {
-		role, ok := msg["role"]
+		role, ok := msg["role"].(string)
 		if ok {
-			if role == "user" || role == "assistant" {
+			switch role {
+			case "user", "assistant":
 				if content, ok := msg["content"]; ok {
-					res.WriteString(fmt.Sprintf("%s%s%s\n", color(role.(string)), content, term.Reset))
-					continue
+					res.WriteString(fmt.Sprintf("%s%s%s\n", color(role), content, term.Reset))
 				}
-			} else if role == "compact" {
+			case "compact":
 				if content, ok := msg["content"]; ok {
 					res.WriteString(fmt.Sprintf("%s%sCompact:%s\n", term.Green, term.Bold, term.Reset))
 					res.WriteString(fmt.Sprintf("%s%s%s\n", color("assistant"), content, term.Reset))
-					continue
 				}
+			case "undo":
+				if _, ok := msg["content"]; ok {
+					res.WriteString(fmt.Sprintf("%s%sUndo last message%s\n", term.Yellow, term.Bold, term.Reset))
+				}
+			default:
+				continue
 			}
 		}
 	}
@@ -137,7 +141,7 @@ func LoadSession(app *appstate.App) bool {
 
 // Undo 处理 /undo：撤销最后一条消息。
 func Undo(app *appstate.App) bool {
-	if err := app.Sess.Undo(); err != nil {
+	if _, err := app.Sess.Undo(); err != nil { // 先不处理undo前user的content
 		fmt.Printf("%sError: %s%s\n", term.Red, err.Error(), term.Reset)
 		return false
 	}
