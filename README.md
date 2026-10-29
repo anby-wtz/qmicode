@@ -6,7 +6,17 @@ TODO
 
 ## 2. 介绍
 
-TODO
+目前市面上有很多Agent框架，如Claude Code、Codex、OpenCode等。然而，这些框架有如下几个问题：
+
+- 多由脚本语言编写，启动和使用时开销大；
+- 工具耦合在框架中，无法方便的管理；
+- 系统提示词无法有效管理；
+- 对LLM的要求往往写在一个Markdown文件中，无法分别放置；
+- 花里胡哨的功能太多，反而影响核心功能；
+
+QmiCode旨在解决这些问题。它使用Go语言编写，启动和运行时开销小；工具以lua脚本方式动态加载，便于管理。没有花里胡哨的功能。
+
+QmiCode提供一套cli和一套WebUI界面，便于使用。
 
 ## 3. 项目概述
 
@@ -19,7 +29,7 @@ TODO
 1. Agent：定义了模型上下文的系统提示词和工具（见agent包）
 2. AgentRuntime：定义了模型的运行时环境，例如OpenAIRuntime（见agent包）
 2. LLMSession：一次对话的上下文（见session包）
-3. LLMTool：模型可用的工具，由Go的.so插件动态加载（见tool包）
+3. LLMTool：模型可用的工具（见tool包）
 4. ModelConfig: 模型的配置，包括BaseURL、APIKEY等（见modelconfig包）
 5. Safe：安全策略，用于限制Agent的工具调用和运行环境（见safe包）
 
@@ -266,7 +276,7 @@ Skill 用于把"某类任务的完整操作指引"从系统提示词中剥离出
 - `Skill(name='list')`：列出当前 agent 下所有可用 skill（名称 + 描述）
 - `Skill(name='<name>')`：加载指定 skill，输出格式为 `SKILL.md of <name> (<path>):` + 正文 + Base directory + 附带文件清单（采样上限20个）。正文中的相对路径均以该 skill 目录为基准。
 
-示例见仓库内 `general-agent/skills/git-release/`。
+示例见仓库内 `general-agent/skills/git-release/`。符合主流Agent框架的Skill定义。
 
 ### 5.4 中断机制（Ctrl-C）
 
