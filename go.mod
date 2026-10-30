@@ -5,6 +5,7 @@ go 1.25.5
 require (
 	github.com/kerimovok/go-lua-converter v1.0.0
 	github.com/mattn/go-colorable v0.1.15
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/nyaosorg/go-readline-ny v1.15.1
 	github.com/openai/openai-go v1.12.0
 	github.com/oscarhealth/gopher-luar v0.0.0-20170406142453-3e9dd995c679
@@ -19,7 +20,6 @@ require (
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/mattn/go-tty v0.0.7 // indirect
-	github.com/modelcontextprotocol/go-sdk v1.8.0 // indirect
 	github.com/nyaosorg/go-box/v3 v3.1.1 // indirect
 	github.com/nyaosorg/go-ttyadapter v0.6.2 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect

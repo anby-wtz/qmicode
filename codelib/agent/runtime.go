@@ -12,6 +12,7 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/param"
+	"github.com/openai/openai-go/shared"
 )
 
 // AgentRuntime 执行层：对一次会话进行 LLM 请求与工具调度。
@@ -64,14 +65,24 @@ func (r *OpenAIRuntime) collectStream(
 	tools []openai.ChatCompletionToolParam,
 	result ChunkResultFuncCallback,
 ) (*openai.ChatCompletionMessage, int, error) {
-	stream := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
+	params := openai.ChatCompletionNewParams{
 		Model:    config.Model,
 		Messages: messages,
 		Tools:    tools,
 		StreamOptions: openai.ChatCompletionStreamOptionsParam{
 			IncludeUsage: param.Opt[bool]{Value: true},
 		},
-	})
+	}
+
+	if config.Options.ReasoningEffort != "" { // string的零值是""
+		params.ReasoningEffort = shared.ReasoningEffort(config.Options.ReasoningEffort)
+	}
+
+	if config.Options.ExtraBody != nil {
+		params.SetExtraFields(config.Options.ExtraBody)
+	}
+
+	stream := client.Chat.Completions.NewStreaming(ctx, params)
 
 	var acc openai.ChatCompletionAccumulator
 	for stream.Next() {
