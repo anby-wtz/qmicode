@@ -31,7 +31,13 @@ func ListAgent(app *appstate.App) bool {
 
 // LoadAgent 处理 /lagent：按名切换 Agent。
 func LoadAgent(app *appstate.App, reload func(name string) error) bool {
-	name, err := term.Ask("name: ")
+	agents, err := app.Conf.ListAgents()
+	var name string
+	if err != nil {
+		name, err = term.Ask("name: ")
+	} else {
+		name, err = term.AskWithCandidates("name: ", agents)
+	}
 	if err != nil {
 		fmt.Printf("%sError: %s%s\n", term.Red, err.Error(), term.Reset)
 		return false

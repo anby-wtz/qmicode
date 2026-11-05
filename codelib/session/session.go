@@ -9,7 +9,7 @@ import (
 )
 
 type QmiCodeCompactInfoParam struct {
-	Content string `json:"content"` // output of cpmpact request
+	Content string `json:"content"` // output of compact request
 	Role    string `json:"role"`    // always "compact"
 }
 

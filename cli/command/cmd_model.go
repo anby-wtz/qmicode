@@ -56,7 +56,13 @@ func SetModel(app *appstate.App) bool {
 
 // LoadModel 处理 /lmodel：按名加载已有模型并设为默认。
 func LoadModel(app *appstate.App) bool {
-	name, err := term.Ask("name: ")
+	models, err := appmc.ListModel(app.Conf)
+	var name string
+	if err != nil {
+		name, err = term.Ask("name: ")
+	} else {
+		name, err = term.AskWithCandidates("name: ", models)
+	}
 	if err != nil {
 		fmt.Printf("%sError: %s%s\n", term.Red, err.Error(), term.Reset)
 		return false

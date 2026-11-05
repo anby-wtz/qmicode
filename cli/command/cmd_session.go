@@ -120,7 +120,13 @@ func ListSession(app *appstate.App) bool {
 
 // LoadSession 处理 /lsess：加载会话并重绘历史。
 func LoadSession(app *appstate.App) bool {
-	name, err := term.Ask("name: ")
+	sessions, err := appsess.ListSessions(app.Conf)
+	var name string
+	if err != nil {
+		name, err = term.Ask("name: ")
+	} else {
+		name, err = term.AskWithCandidates("name: ", sessions)
+	}
 	if err != nil {
 		fmt.Printf("%sError: %s%s\n", term.Red, err.Error(), term.Reset)
 		return false
