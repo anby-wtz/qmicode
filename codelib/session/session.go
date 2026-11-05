@@ -13,6 +13,11 @@ type QmiCodeCompactInfoParam struct {
 	Role    string `json:"role"`    // always "compact"
 }
 
+type QmiCodeUndoInfoParam struct {
+	Content string `json:"content"` // always "undo"
+	Role    string `json:"role"`    // always "undo"
+}
+
 // fuck fuck fuck stupid openai-go
 // the sb developers banned extand message type
 // fuck this shit
@@ -55,7 +60,7 @@ func (sess *LLMSession) AddCompactMessage(content string) {
 }
 
 func (sess *LLMSession) AddUndoMessage() {
-	data, _ := json.Marshal(QmiCodeCompactInfoParam{
+	data, _ := json.Marshal(QmiCodeUndoInfoParam{
 		Content: "undo",
 		Role:    "undo",
 	})

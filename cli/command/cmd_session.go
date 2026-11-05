@@ -136,6 +136,7 @@ func LoadSession(app *appstate.App) bool {
 		fmt.Printf("%sError: %s%s\n", term.Red, err.Error(), term.Reset)
 		return false
 	}
+	app.Sess.SetSystemMessage(app.Ag.GetSysPrompt())
 	fmt.Print("\f\n")                   // 清屏
 	fmt.Printf("%s%s\n", s, term.Reset) // 重新打印会话内容
 	return false

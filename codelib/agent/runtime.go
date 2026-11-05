@@ -32,6 +32,9 @@ type LLMChunkContentType int
 const (
 	ContentReasoning LLMChunkContentType = iota
 	ContentAnswer
+
+	ContentReasoningByReasoning
+	ContentReasoningByReasoningContent
 )
 
 // NewAgentRuntime 创建一个基于 OpenAI Chat Completions API 协议的默认 Runtime。
@@ -96,11 +99,12 @@ func (r *OpenAIRuntime) collectStream(
 				continue
 			}
 			reasoning, ok := rawMap["reasoning"]
-			if !ok || reasoning == "" {
-				reasoning, ok = rawMap["reasoning_content"]
-			}
 			if ok && reasoning != "" {
-				result(reasoning, ContentReasoning)
+				result(reasoning, ContentReasoningByReasoning)
+			}
+			reasoning, ok = rawMap["reasoning_content"]
+			if ok && reasoning != "" {
+				result(reasoning, ContentReasoningByReasoningContent)
 				continue
 			}
 
@@ -136,25 +140,46 @@ func (r *OpenAIRuntime) Request(ctx context.Context, ag Agent, config modelconfi
 	}
 	client := newClient(config)
 	var partialContent string // 已产出的正文内容，用于中断时保留为 assistant message
+	var reasoning string
+	var reasonField string
 
 	prevCallback := result
 	result = func(s string, t LLMChunkContentType) {
-		if t == ContentAnswer {
+		switch t {
+		case ContentAnswer:
 			partialContent += s
+			prevCallback(s, ContentAnswer)
+			return
+		case ContentReasoningByReasoning:
+			reasoning += s
+			reasonField = "reasoning"
+			prevCallback(s, ContentReasoning)
+			return
+		case ContentReasoningByReasoningContent:
+			reasoning += s
+			reasonField = "reasoning_content"
+			prevCallback(s, ContentReasoning)
+			return
 		}
-		prevCallback(s, t)
+	}
+
+	builder := func(msg openai.ChatCompletionMessageParamUnion) openai.ChatCompletionMessageParamUnion {
+		msg.OfAssistant.SetExtraFields(
+			map[string]any{reasonField: reasoning},
+		)
+		return msg
 	}
 
 	msg, usage, err := r.collectStream(client, ctx, config, sess.Messages, r.buildTools(ag), result)
 	if err != nil {
 		if errors.Is(err, ErrInterrupted) && partialContent != "" {
 			// 用户中断：保留已产出的部分输出为一条 assistant message（不保存未完成的 tool_calls，避免产生非法会话）
-			sess.AddMessage(openai.AssistantMessage(partialContent))
+			sess.AddMessage(builder(openai.AssistantMessage(partialContent)))
 		}
 		return nil, err
 	}
 
-	sess.AddMessage(msg.ToParam())
+	sess.AddMessage(builder(msg.ToParam()))
 
 	if len(msg.ToolCalls) > 0 {
 		return msg.ToolCalls, nil
