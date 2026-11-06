@@ -164,9 +164,11 @@ func (r *OpenAIRuntime) Request(ctx context.Context, ag Agent, config modelconfi
 	}
 
 	builder := func(msg openai.ChatCompletionMessageParamUnion) openai.ChatCompletionMessageParamUnion {
-		msg.OfAssistant.SetExtraFields(
-			map[string]any{reasonField: reasoning},
-		)
+		if reasonField != "" && reasoning != "" && msg.OfAssistant != nil {
+			msg.OfAssistant.SetExtraFields(
+				map[string]any{reasonField: reasoning},
+			)
+		}
 		return msg
 	}
 

@@ -233,8 +233,12 @@ func Start() {
 
 		app.Sess.AddMessage(openai.UserMessage(prompt))
 
-		if err := runAgentLoop(app); errors.Is(err, agent.ErrInterrupted) {
-			fmt.Printf("\n%s[Interrupted]%s Session saved.%s\n", Yellow, Reset, Reset)
+		if err := runAgentLoop(app); err != nil {
+			if errors.Is(err, agent.ErrInterrupted) {
+				fmt.Printf("\n%s[Interrupted]%s Session saved.%s\n", Yellow, Reset, Reset)
+			} else {
+				fmt.Printf("%s[Error]%s%s\n", Red, err.Error(), Reset)
+			}
 		}
 
 		appsess.SaveSession(conf, app.Sess)
