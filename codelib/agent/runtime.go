@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"qmicode-go/codelib"
 	"qmicode-go/codelib/modelconfig"
 	"qmicode-go/codelib/session"
 
@@ -55,6 +56,7 @@ func newClient(config modelconfig.ModelConfig) openai.Client {
 	return openai.NewClient(
 		option.WithBaseURL(config.BaseURL),
 		option.WithAPIKey(config.ApiKey),
+		option.WithHeader("User-Agent", fmt.Sprintf("QmiCode/%s (+%s)", codelib.Version, codelib.Github)),
 	)
 }
 
