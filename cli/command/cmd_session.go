@@ -167,12 +167,13 @@ func RenameSession(app *appstate.App) bool {
 	if err := appsess.RenameSession(app.Conf, app.Sess, name); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			app.Sess.Name = name // 重命名后立即保存
-			appsess.SaveSession(app.Conf, app.Sess)
 			goto T
 		}
 		fmt.Printf("%sError: %s%s\n", term.Red, err.Error(), term.Reset)
+		return false
 	}
 T:
+	appsess.SaveSession(app.Conf, app.Sess)
 	fmt.Printf("%sRenamed session to: %s%s\n", term.Green, name, term.Reset)
 	return false
 }

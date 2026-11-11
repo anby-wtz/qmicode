@@ -51,6 +51,10 @@ func LoadSession(conf config.Config, name string, sess *coresess.LLMSession) err
 
 func RenameSession(conf config.Config, sess *coresess.LLMSession, newName string) error {
 	oldName := sess.Name
+	err := os.Rename(conf.GetSessionPath(oldName), conf.GetSessionPath(newName))
+	if err != nil {
+		return err
+	}
 	sess.Name = newName
-	return os.Rename(conf.GetSessionPath(oldName), conf.GetSessionPath(newName))
+	return nil
 }
