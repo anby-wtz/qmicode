@@ -29,6 +29,8 @@ var ORDER = map[string]string{
 	"ORDER_LOAD_AGENT":        "/lagent",
 	"ORDER_LIST_AGENT":        "/lsagent",
 	"ORDER_UNDO":              "/undo", // undo last message
+
+	"ATTACH_IMAGE": "/attimg",
 }
 
 const (
@@ -94,6 +96,9 @@ func process_special_input(app *appstate.App, input string) bool {
 
 	case ORDER["ORDER_UNDO"]:
 		return command.Undo(app)
+
+	case ORDER["ATTACH_IMAGE"]:
+		return command.AttachImage(app)
 
 	case ORDER_DEBUG_SHOW_SESSION:
 		return command.DebugShowSession(app)

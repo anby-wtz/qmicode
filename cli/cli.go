@@ -24,7 +24,6 @@ import (
 	"github.com/nyaosorg/go-readline-ny/completion"
 	"github.com/nyaosorg/go-readline-ny/keys"
 	"github.com/nyaosorg/go-readline-ny/simplehistory"
-	"github.com/openai/openai-go"
 
 	appsess "qmicode-go/app/session"
 )
@@ -231,7 +230,15 @@ func Start() {
 			continue
 		}
 
-		app.Sess.AddMessage(openai.UserMessage(prompt))
+		msg, err := GetOpenAIMsg(prompt, app.AttachImages)
+		if err != nil {
+			fmt.Printf("%s[Error]%s%s\n", Red, err.Error(), Reset)
+			// 清空图片附件
+			app.AttachImages = nil
+			continue
+		}
+		app.Sess.AddMessage(msg)
+		app.AttachImages = nil // 清空图片附件
 
 		if err := runAgentLoop(app); err != nil {
 			if errors.Is(err, agent.ErrInterrupted) {
@@ -241,7 +248,11 @@ func Start() {
 			}
 		}
 
-		appsess.SaveSession(conf, app.Sess)
+		err = appsess.SaveSession(conf, app.Sess)
+		if err != nil {
+			fmt.Printf("%sSave Session Failed: %v%s\n", Red, err, Reset)
+			continue
+		}
 
 	}
 }
