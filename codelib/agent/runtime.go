@@ -33,9 +33,6 @@ type LLMChunkContentType int
 const (
 	ContentReasoning LLMChunkContentType = iota
 	ContentAnswer
-
-	ContentReasoningByReasoning
-	ContentReasoningByReasoningContent
 )
 
 // NewAgentRuntime 创建一个基于 OpenAI Chat Completions API 协议的默认 Runtime。
@@ -102,11 +99,11 @@ func (r *OpenAIRuntime) collectStream(
 			}
 			reasoning, ok := rawMap["reasoning"]
 			if ok && reasoning != "" {
-				result(reasoning, ContentReasoningByReasoning)
+				result(reasoning, ContentReasoning)
 			}
 			reasoning, ok = rawMap["reasoning_content"]
 			if ok && reasoning != "" {
-				result(reasoning, ContentReasoningByReasoningContent)
+				result(reasoning, ContentReasoning)
 				continue
 			}
 
@@ -136,6 +133,20 @@ func (r *OpenAIRuntime) buildTools(ag Agent) []openai.ChatCompletionToolParam {
 	return openaiTools
 }
 
+func openai2toolcall(ts []openai.ChatCompletionMessageToolCall) []session.LLMToolCall {
+	tcs := make([]session.LLMToolCall, len(ts))
+	for i, t := range ts {
+		tcs[i] = session.LLMToolCall{
+			ID: t.ID,
+			Funtion: session.LLMToolCallFunction{
+				Name:      t.Function.Name,
+				Arguments: t.Function.Arguments,
+			},
+		}
+	}
+	return tcs
+}
+
 func (r *OpenAIRuntime) Request(ctx context.Context, ag Agent, config modelconfig.ModelConfig, sess *session.LLMSession, result ChunkResultFuncCallback) ([]ToolCall, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -143,7 +154,6 @@ func (r *OpenAIRuntime) Request(ctx context.Context, ag Agent, config modelconfi
 	client := newClient(config)
 	var partialContent string // 已产出的正文内容，用于中断时保留为 assistant message
 	var reasoning string
-	var reasonField string
 
 	prevCallback := result
 	result = func(s string, t LLMChunkContentType) {
@@ -152,38 +162,27 @@ func (r *OpenAIRuntime) Request(ctx context.Context, ag Agent, config modelconfi
 			partialContent += s
 			prevCallback(s, ContentAnswer)
 			return
-		case ContentReasoningByReasoning:
+		case ContentReasoning:
 			reasoning += s
-			reasonField = "reasoning"
-			prevCallback(s, ContentReasoning)
-			return
-		case ContentReasoningByReasoningContent:
-			reasoning += s
-			reasonField = "reasoning_content"
 			prevCallback(s, ContentReasoning)
 			return
 		}
 	}
 
-	builder := func(msg openai.ChatCompletionMessageParamUnion) openai.ChatCompletionMessageParamUnion {
-		if reasonField != "" && reasoning != "" && msg.OfAssistant != nil {
-			msg.OfAssistant.SetExtraFields(
-				map[string]any{reasonField: reasoning},
-			)
-		}
-		return msg
+	msgRaw, err := sess.GetOpenAIMessages()
+	if err != nil {
+		return nil, err
 	}
-
-	msg, usage, err := r.collectStream(client, ctx, config, sess.Messages, r.buildTools(ag), result)
+	msg, usage, err := r.collectStream(client, ctx, config, msgRaw, r.buildTools(ag), result)
 	if err != nil {
 		if errors.Is(err, ErrInterrupted) && partialContent != "" {
 			// 用户中断：保留已产出的部分输出为一条 assistant message（不保存未完成的 tool_calls，避免产生非法会话）
-			sess.AddMessage(builder(openai.AssistantMessage(partialContent)))
+			sess.AddMessage(session.NewAssistantMessage(partialContent, &reasoning, []session.LLMToolCall{}))
 		}
 		return nil, err
 	}
 
-	sess.AddMessage(builder(msg.ToParam()))
+	sess.AddMessage(session.NewAssistantMessage(msg.Content, &reasoning, openai2toolcall(msg.ToolCalls)))
 
 	if len(msg.ToolCalls) > 0 {
 		return msg.ToolCalls, nil
@@ -206,7 +205,7 @@ func (r *OpenAIRuntime) ExecuteTools(ctx context.Context, ag Agent, ts []ToolCal
 		// 已中断：当前及后续工具全部标记为 Aborted，保证 assistant.tool_calls 与 tool message 一一对应。
 		if ctx.Err() != nil || interrupted {
 			sess.AddMessage(
-				openai.ToolMessage("Aborted by user", tc.ID),
+				session.NewToolCallMessage(tc.ID, "Aborted by user"),
 			)
 			interrupted = true
 			continue
@@ -214,14 +213,14 @@ func (r *OpenAIRuntime) ExecuteTools(ctx context.Context, ag Agent, ts []ToolCal
 
 		t, ok := ag.FindTool(tc.Function.Name)
 		if !ok {
-			sess.AddMessage(openai.ToolMessage(fmt.Sprintf("Error: tool %s not found", tc.Function.Name), tc.ID))
+			sess.AddMessage(session.NewToolCallMessage(tc.ID, fmt.Sprintf("Error: tool %s not found", tc.Function.Name)))
 			continue
 		}
 
 		premsg, err := t.CallPreMsgFunc(args)
 		if !premsgfunc(premsg, err) {
 			sess.AddMessage(
-				openai.ToolMessage("Human Aborted", tc.ID),
+				session.NewToolCallMessage(tc.ID, "Human Aborted"),
 			)
 			continue
 		}
@@ -232,7 +231,7 @@ func (r *OpenAIRuntime) ExecuteTools(ctx context.Context, ag Agent, ts []ToolCal
 		}
 		aftermsgfunc(human, err)
 		sess.AddMessage(
-			openai.ToolMessage(res, tc.ID),
+			session.NewToolCallMessage(tc.ID, res),
 		)
 
 		if ctx.Err() != nil {
@@ -260,17 +259,11 @@ func (r *OpenAIRuntime) Compact(ctx context.Context, ag Agent, config modelconfi
 		openai.UserMessage(msgstr),
 	}, nil, result)
 	if err != nil {
-		// 用户中断：不修改会话状态，直接返回
+		// 用户中断直接返回
 		return err
 	}
 
 	sess.AddCompactMessage(msg.Content)
-	sess.ClearMessages()
-	sess.AddMessage(openai.SystemMessage(ag.GetSysPrompt()))
-
-	// 压缩信息已经在上文中增加，这里只需要向 Message 中增加即可
-	sess.AddMessageOnlyForLLM(openai.UserMessage("What did we do so far?"))
-	sess.AddMessageOnlyForLLM(msg.ToParam())
 
 	return nil
 }

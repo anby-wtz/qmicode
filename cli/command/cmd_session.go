@@ -2,7 +2,6 @@ package command
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -26,53 +25,28 @@ func color(role string) string {
 	return ""
 }
 
-// renderMessages 把会话的完整历史（含 compact 记录和 undo 记录）渲染为带颜色的文本。
+// renderMessages 把会话的完整历史（含 compact 记录）渲染为带颜色的文本。
 func renderMessages(sess *session.LLMSession) (string, error) {
-	data, err := json.Marshal(sess.EntireMessages)
-	if err != nil {
-		return "", err
-	}
-
-	var context []map[string]any
-	json.Unmarshal(data, &context)
-
 	var res strings.Builder
 
-	for _, msg := range context {
-		role, ok := msg["role"].(string)
-		if ok {
-			switch role {
-			case "user", "assistant":
-				if content, ok := msg["content"]; ok {
-					res.WriteString(fmt.Sprintf("%s%s%s\n", color(role), content, term.Reset))
-				}
-			case "compact":
-				if content, ok := msg["content"]; ok {
-					res.WriteString(fmt.Sprintf("%s%sCompact:%s\n", term.Green, term.Bold, term.Reset))
-					res.WriteString(fmt.Sprintf("%s%s%s\n", color("assistant"), content, term.Reset))
-				}
-			case "undo":
-				if _, ok := msg["content"]; ok {
-					res.WriteString(fmt.Sprintf("%s%sUndo last message%s\n", term.Yellow, term.Bold, term.Reset))
-				}
-			default:
-				continue
+	for _, msg := range sess.MessagesTree.IterFromChild(sess.CurrentIndex) {
+		role := msg.Role
+		switch role {
+		case "user", "assistant":
+			if msg.Content.Text != nil {
+				res.WriteString(fmt.Sprintf("%s%s%s\n", color(role), msg.Content.Text, term.Reset))
 			}
+		case "compact":
+			if msg.Content.Text != nil {
+				res.WriteString(fmt.Sprintf("%s%sCompact:%s\n", term.Green, term.Bold, term.Reset))
+				res.WriteString(fmt.Sprintf("%s%s%s\n", color("assistant"), msg.Content.Text, term.Reset))
+			}
+		default:
+			continue
 		}
 	}
 
 	return res.String(), nil
-}
-
-// ShowSessionJSON 处理 /shsejson：打印会话中实际发送给 LLM 的消息 JSON。
-func ShowSessionJSON(app *appstate.App) bool {
-	str, err := app.Sess.GetJSON()
-	if err != nil {
-		fmt.Printf("%sError: %s%s\n", term.Red, err.Error(), term.Reset)
-		return false
-	}
-	fmt.Printf("%sSession JSON:%s\n%s\n", term.Magenta, term.Reset, str)
-	return false
 }
 
 // Compact 处理 /compact：压缩上下文。

@@ -1,158 +1,107 @@
 package session
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/openai/openai-go"
 )
 
-type QmiCodeCompactInfoParam struct {
-	Content string `json:"content"` // output of compact request
-	Role    string `json:"role"`    // always "compact"
-}
-
-type QmiCodeUndoInfoParam struct {
-	Content string `json:"content"` // always "undo"
-	Role    string `json:"role"`    // always "undo"
-}
-
-// fuck fuck fuck stupid openai-go
-// the sb developers banned extand message type
-// fuck this shit
-type LLMMessageUnion json.RawMessage
-
-func (u LLMMessageUnion) MarshalJSON() ([]byte, error) {
-	if u == nil {
-		return []byte("null"), nil
-	}
-	return []byte(u), nil
-}
-
-func (u *LLMMessageUnion) UnmarshalJSON(data []byte) error {
-	*u = append([]byte(nil), data...)
-	return nil
-}
-
+/*
+LLM的对话结构体类型
+系统提示词由Agent管理，不计入Messages列表
+Message采用链表结构，保存上下文和历史记录
+向上追溯，要么追溯到根，要么追溯到上一个压缩信息
+*/
 type LLMSession struct {
-	Name string `json:"name"` // session name, for display only
+	Name string `json:"name"`
 
-	Messages []openai.ChatCompletionMessageParamUnion `json:"messages"`
-	Usage    int                                      `json:"usage"` // total tokens used
-	Cost     int                                      `json:"cost"`  // future function
+	SystemMessage string `json:"system_message"`
 
-	// non-compacted messages, for humans to see
-	EntireMessages []LLMMessageUnion `json:"entire_messages"` // because of the fucking openai-go library, don't directly use it as openai messages
+	MessagesTree LLMMessageTree `json:"messages_tree"`
+	CurrentIndex int            `json:"current_index"` // 当前消息索引
+
+	Usage int `json:"usage"` // 当前上下文总共使用的Token（即占用上下文窗口的大小），非会话以来总共使用的Token
+	Cost  int `json:"cost"`  // future function
+}
+
+type LLMMessageEntry struct {
+	Message   *LLMMessage `json:"message"`
+	PrevIndex int         `json:"prev_index"`
+}
+
+func NewLLMSession(name string) *LLMSession {
+	return &LLMSession{
+		Name:         name,
+		MessagesTree: LLMMessageTree{},
+		CurrentIndex: RootParentIndex,
+	}
 }
 
 func (sess *LLMSession) SetSessionName(name string) {
 	sess.Name = name
 }
 
-// 压缩信息仅在EntireMessages中体现。这个函数仅用于添加压缩信息，不添加到Messages中
 func (sess *LLMSession) AddCompactMessage(content string) {
-	data, _ := json.Marshal(QmiCodeCompactInfoParam{
-		Content: content,
-		Role:    "compact",
-	})
-	sess.EntireMessages = append(sess.EntireMessages, LLMMessageUnion(data))
+	sess.CurrentIndex = sess.MessagesTree.AddNode(
+		&LLMMessage{
+			Type: LLMMessageTypeCompact,
+			Role: "compact",
+			Content: &LLMMessageContent{
+				Text: &content,
+			},
+		},
+		sess.CurrentIndex,
+	)
 }
 
-func (sess *LLMSession) AddUndoMessage() {
-	data, _ := json.Marshal(QmiCodeUndoInfoParam{
-		Content: "undo",
-		Role:    "undo",
-	})
-	sess.EntireMessages = append(sess.EntireMessages, LLMMessageUnion(data))
+func (sess *LLMSession) AddMessage(msg *LLMMessage) {
+	sess.CurrentIndex = sess.MessagesTree.AddNode(msg, sess.CurrentIndex)
 }
 
-func (sess *LLMSession) AddMessageOnlyForLLM(msg openai.ChatCompletionMessageParamUnion) {
-	sess.Messages = append(sess.Messages, msg)
-}
-
-func (sess *LLMSession) AddMessage(msg openai.ChatCompletionMessageParamUnion) {
-	sess.Messages = append(sess.Messages, msg)
-	data, _ := json.Marshal(msg)
-	sess.EntireMessages = append(sess.EntireMessages, LLMMessageUnion(data))
-}
-
-// 仅用于删除多余的最后的user消息
-func (sess *LLMSession) DeleteLastMessage() {
-	if len(sess.Messages) > 0 {
-		sess.Messages = sess.Messages[:len(sess.Messages)-1]
-		sess.EntireMessages = sess.EntireMessages[:len(sess.EntireMessages)-1]
+func (sess *LLMSession) GetMessageList() []*LLMMessage {
+	res := make([]*LLMMessage, 0)
+	for _, message := range sess.MessagesTree.IterFromChild(sess.CurrentIndex) {
+		res = append(res, message)
+		if message.Type == LLMMessageTypeCompact {
+			break
+		}
 	}
-}
-
-func (sess *LLMSession) GetJSON() (string, error) {
-	data, err := json.Marshal(sess.Messages)
-	if err != nil {
-		return "", err
+	// reverse res
+	for i, j := 0, len(res)-1; i < j; i, j = i+1, j-1 {
+		res[i], res[j] = res[j], res[i]
 	}
-	return string(data), nil
-}
-
-func (sess *LLMSession) LoadFromJSON(data string) error {
-	err := json.Unmarshal([]byte(data), &sess.Messages)
-	if err != nil {
-		return err
-	}
-	return nil
+	return res
 }
 
 func (sess *LLMSession) GetMessageString() (string, error) {
-	data, err := json.Marshal(sess.Messages)
-	if err != nil {
-		return "", err
-	}
-
-	var context []map[string]any
-	json.Unmarshal(data, &context)
+	context := sess.GetMessageList()
 
 	var res strings.Builder
 
 	for _, msg := range context {
-		if role, ok := msg["role"]; ok && (role == "user" || role == "assistant") {
-			if content, ok := msg["content"]; ok {
-				res.WriteString(fmt.Sprintf("%s: \n%s\n\n--------\n\n", role, content))
-				continue
-			}
+		if msg.Type == LLMMessageTypeSession && (msg.Role == "user" || msg.Role == "assistant") && msg.Content.Text != nil {
+			res.WriteString(fmt.Sprintf("%s: \n%s\n\n--------\n\n", msg.Role, *msg.Content.Text))
 		}
 	}
 
 	return res.String(), nil
 }
 
-func (sess *LLMSession) ClearMessages() {
-	sess.Messages = []openai.ChatCompletionMessageParamUnion{}
-}
-
 func (sess *LLMSession) SetSystemMessage(content string) {
-	// 第一个一定是系统提示词
-
-	if len(sess.Messages) > 0 {
-		sess.Messages[0] = openai.SystemMessage(content)
-		data, _ := json.Marshal(sess.Messages[0])
-		sess.EntireMessages[0] = LLMMessageUnion(data)
-	}
+	sess.SystemMessage = content
 }
 
-// string返回值：undo的消息前user说了什么
-func (sess *LLMSession) Undo() (string, error) {
-	n := len(sess.Messages)
-	if n == 0 {
-		return "", fmt.Errorf("no messages to undo")
+// 返回值：undo的消息前user说了什么
+func (sess *LLMSession) Undo() (*LLMMessageContent, error) {
+	if sess.CurrentIndex < 0 {
+		return nil, fmt.Errorf("no message to undo")
 	}
-	// Undo到上一个用户消息
-	for i := n - 1; i >= 0; i-- {
-		if sess.Messages[i].OfUser != nil {
-			content := sess.Messages[i].OfUser.Content.OfString.Value
-			sess.Messages = sess.Messages[:i]
-			sess.AddUndoMessage()
-			return content, nil
+	c := sess.CurrentIndex
+	// 找到上一个User消息
+	for index, message := range sess.MessagesTree.IterFromChild(c) {
+		if message.Type == LLMMessageTypeSession && message.Role == "user" {
+			sess.CurrentIndex, _ = sess.MessagesTree.GetParentIndex(index)
+			return message.Content, nil
 		}
 	}
-	return "", fmt.Errorf("no message to undo")
-
+	return nil, fmt.Errorf("no user message to undo")
 }

@@ -38,8 +38,6 @@ func ListSessions(conf config.Config) ([]string, error) {
 
 // 加载并替换sess指针指向的内容
 func LoadSession(conf config.Config, name string, sess *coresess.LLMSession) error {
-	sess.Messages = nil
-	sess.EntireMessages = nil
 	file, err := os.Open(conf.GetSessionPath(name))
 	if err != nil {
 		return err

@@ -4,8 +4,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"os"
-
-	"github.com/openai/openai-go"
+	"qmicode-go/codelib/session"
 )
 
 func GetImageBase64(path string) (string, error) {
@@ -20,20 +19,14 @@ func GetImageBase64(path string) (string, error) {
 	return "data:" + mime + ";base64," + b64, nil
 }
 
-func GetOpenAIMsg(prompt string, attachImages []string) (openai.ChatCompletionMessageParamUnion, error) {
-	parts := make([]openai.ChatCompletionContentPartUnionParam, 0)
-	if prompt != "" {
-		parts = append(parts, openai.TextContentPart(prompt))
-	}
+func GetMsg(prompt string, attachImages []string) (*session.LLMMessage, error) {
+	images := []string{}
 	for _, path := range attachImages {
 		b64, err := GetImageBase64(path)
 		if err != nil {
-			return openai.ChatCompletionMessageParamUnion{}, err
+			return &session.LLMMessage{}, err
 		}
-		parts = append(parts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
-			URL:    b64,
-			Detail: string(openai.ImageURLDeltaDetailAuto),
-		}))
+		images = append(images, b64)
 	}
-	return openai.UserMessage(parts), nil
+	return session.NewUserMessage(&prompt, images), nil
 }

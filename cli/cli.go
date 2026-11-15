@@ -230,7 +230,7 @@ func Start() {
 			continue
 		}
 
-		msg, err := GetOpenAIMsg(prompt, app.AttachImages)
+		msg, err := GetMsg(prompt, app.AttachImages)
 		if err != nil {
 			fmt.Printf("%s[Error]%s%s\n", Red, err.Error(), Reset)
 			// 清空图片附件

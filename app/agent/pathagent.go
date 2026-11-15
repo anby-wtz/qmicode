@@ -37,8 +37,6 @@ import (
 	"qmicode-go/codelib/tool"
 	"sort"
 	"strings"
-
-	"github.com/openai/openai-go"
 )
 
 // PathAgent 是 core.Agent（定义层）的一个实现：提示词加载 + 工具定义/注册。
@@ -207,10 +205,9 @@ func (a *PathAgent) RemoveTool(name string) bool {
 }
 
 func (a *PathAgent) GetInitLLMSession(name string) *session.LLMSession {
-	res := session.LLMSession{}
-	res.SetSessionName(name)
-	res.AddMessage(openai.SystemMessage(a.SysPrompt))
-	return &res
+	res := session.NewLLMSession(name)
+	res.SetSystemMessage(a.SysPrompt)
+	return res
 }
 
 // Destroy 释放加载的资源（Lua 工具组的 LState），只能调用一次。
