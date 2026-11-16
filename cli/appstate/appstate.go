@@ -8,7 +8,16 @@ import (
 	"qmicode-go/codelib/session"
 )
 
+// Mode 是本进程使用的运行时模式，启动方式决定，启动后不变。
+type Mode int
+
+const (
+	ModeOpenAI Mode = iota
+	ModeChatGPT
+)
+
 type App struct {
+	Mode      Mode                // 运行时模式
 	Conf      config.Config       // 配置
 	Rt        agent.AgentRuntime  // 运行时（无状态）
 	Ag        agent.Agent         // 当前 Agent

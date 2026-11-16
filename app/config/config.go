@@ -18,9 +18,11 @@ type Config struct {
 	McpConfigFileName string
 }
 
-// mcpConfigFileName 是 agent 目录下 MCP 配置的默认文件名。
-// 同时被 DefaultConfig.McpConfigFileName 与 EnsureMcpConfig 使用，保持单一来源。
+const AppName = "QmiCode"
+
 const mcpConfigFileName = "mcp.yaml"
+const ChatgptAuthFileName = "chatgpt_auth.json"
+const ChatgptSettingsFileName = "chatgpt.yaml"
 
 var DefaultConfig = Config{
 	AgentsDir:             "agents",
@@ -92,6 +94,14 @@ func (config *Config) GetSessionPath(sessName string) string {
 
 func (config *Config) GetAgentMcpConfigFilePath(agentName string) string {
 	return filepath.Join(config.GetAgentPath(agentName), config.McpConfigFileName)
+}
+
+func (config *Config) GetChatgptAuthPath() string {
+	return filepath.Join(config.WorkDir, ChatgptAuthFileName)
+}
+
+func (config *Config) GetChatgptSettingsPath() string {
+	return filepath.Join(config.WorkDir, ChatgptSettingsFileName)
 }
 
 // EnsureMcpConfig 确保 agent 目录下存在 mcp.yaml。

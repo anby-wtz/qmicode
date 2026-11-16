@@ -2,9 +2,11 @@ package cli
 
 import (
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"os"
 	"qmicode-go/codelib/session"
+	"strings"
 )
 
 func GetImageBase64(path string) (string, error) {
@@ -13,8 +15,12 @@ func GetImageBase64(path string) (string, error) {
 		return "", err
 	}
 
-	b64 := base64.StdEncoding.EncodeToString(data)
 	mime := http.DetectContentType(data)
+	if !strings.HasPrefix(mime, "image/") && mime != "application/pdf" {
+		return "", fmt.Errorf("%s: unsupported media type %q", path, mime)
+	}
+
+	b64 := base64.StdEncoding.EncodeToString(data)
 
 	return "data:" + mime + ";base64," + b64, nil
 }

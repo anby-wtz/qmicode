@@ -10,6 +10,11 @@ import (
 
 // SetModel 处理 /setmodel：交互式录入新模型并保存，同时设为默认。
 func SetModel(app *appstate.App) bool {
+	if app.Mode == appstate.ModeChatGPT {
+		fmt.Printf("%sChatGPT 模式下模型只能来自远端列表，请使用 /lmodel%s\n", term.Yellow, term.Reset)
+		return false
+	}
+
 	name, err := term.Ask("name: ")
 
 	if err != nil {
@@ -56,6 +61,10 @@ func SetModel(app *appstate.App) bool {
 
 // LoadModel 处理 /lmodel：按名加载已有模型并设为默认。
 func LoadModel(app *appstate.App) bool {
+	if app.Mode == appstate.ModeChatGPT {
+		return LoadChatGPTModel(app)
+	}
+
 	models, err := appmc.ListModel(app.Conf)
 	var name string
 	if err != nil {
@@ -85,6 +94,11 @@ func LoadModel(app *appstate.App) bool {
 
 // ListModel 处理 /lsmodel：列出全部已保存模型。
 func ListModel(app *appstate.App) bool {
+	if app.Mode == appstate.ModeChatGPT {
+		fmt.Printf("%sChatGPT 模式无本地模型，可用模型由远端列出，请使用 /lmodel%s\n", term.Yellow, term.Reset)
+		return false
+	}
+
 	names, err := appmc.ListModel(app.Conf)
 	if err != nil {
 		fmt.Printf("%sError: %s%s\n", term.Red, err.Error(), term.Reset)
@@ -100,6 +114,11 @@ func ListModel(app *appstate.App) bool {
 
 // RemoveModel 处理 /rmmodel：删除模型，并自动切换到列表中的第一个模型。
 func RemoveModel(app *appstate.App) bool {
+	if app.Mode == appstate.ModeChatGPT {
+		fmt.Printf("%sChatGPT 模式无本地模型，请使用 /lmodel 切换模型%s\n", term.Yellow, term.Reset)
+		return false
+	}
+
 	name, err := term.Ask("name: ")
 	if err != nil {
 		fmt.Printf("%sError: %s%s\n", term.Red, err.Error(), term.Reset)
@@ -135,6 +154,10 @@ func RemoveModel(app *appstate.App) bool {
 
 // ShowModel 处理 /shmodel：显示当前模型信息。
 func ShowModel(app *appstate.App) bool {
+	if app.Mode == appstate.ModeChatGPT {
+		return ShowChatGPTModel(app)
+	}
+
 	fmt.Printf("%sBaseURL: %s\nModelName: %s%s\n", term.Yellow, app.Model.BaseURL, app.Model.Model, term.Reset)
 	return false
 }

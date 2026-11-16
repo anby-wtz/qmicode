@@ -13,6 +13,7 @@ import (
 	"qmicode-go/app/config"
 	appmc "qmicode-go/app/modelconfig"
 	"qmicode-go/cli/appstate"
+	"qmicode-go/cli/command"
 	"qmicode-go/cli/term"
 	"qmicode-go/codelib/agent"
 	"slices"
@@ -185,27 +186,37 @@ func loadMcp(app *appstate.App) error {
 	return nil
 }
 
-func Start() {
+func Start(mode appstate.Mode) error {
 	conf := config.DefaultConfig
 
 	app := &appstate.App{
+		Mode: mode,
 		Conf: conf,
-		Rt:   agent.NewAgentRuntime(),
 	}
 
-	err := updateCurrentAgent(app, conf.GeneralAgentName)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%sFailed: %v%s\n", Red, err, Reset)
-		os.Exit(1)
+	var err error
+	switch mode {
+	case appstate.ModeChatGPT:
+		if err := command.SetupChatGPT(app); err != nil {
+			return err
+		}
+	default:
+		app.Rt = agent.NewAgentRuntime()
+	}
+
+	if err := updateCurrentAgent(app, conf.GeneralAgentName); err != nil {
+		return err
 	}
 
 	defer app.Ag.Destroy()
 
 	app.Sess = app.Ag.GetInitLLMSession(time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05"))
 
-	app.ModelName, err = appmc.LoadDefaultModel(&app.Model, conf)
-	if err != nil {
-		fmt.Printf("%sLoad Default Model Failed: %v. Please Set You Model By `/setmodel`%s\n", Red, err, Reset)
+	if mode == appstate.ModeOpenAI {
+		app.ModelName, err = appmc.LoadDefaultModel(&app.Model, conf)
+		if err != nil {
+			fmt.Printf("%sLoad Default Model Failed: %v. Please Set You Model By `/setmodel`%s\n", Red, err, Reset)
+		}
 	}
 
 	err = app.Safe.LoadFromDefault(conf)
@@ -214,6 +225,9 @@ func Start() {
 	}
 
 	editor, history := GetDefaultEditorAndHistory(func(w io.Writer) (int, error) {
+		if app.Mode == appstate.ModeChatGPT {
+			return fmt.Fprintf(w, "\n%s(Agent: %s%s%s, ChatGPT: %s%s%s, Usage: %s%d%s)%s %s> %s", Cyan, Bold, app.AgentName, Reset+Cyan, Bold, app.ModelName, Reset+Cyan, Bold, app.Sess.Usage, Reset+Cyan, Reset, Bold, Reset)
+		}
 		return fmt.Fprintf(w, "\n%s(Agent: %s%s%s, Model: %s%s%s, Usage: %s%d%s)%s %s> %s", Cyan, Bold, app.AgentName, Reset+Cyan, Bold, app.ModelName, Reset+Cyan, Bold, app.Sess.Usage, Reset+Cyan, Reset, Bold, Reset)
 	})
 
@@ -255,4 +269,6 @@ func Start() {
 		}
 
 	}
+
+	return nil
 }
