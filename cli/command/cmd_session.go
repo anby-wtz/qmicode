@@ -34,12 +34,12 @@ func renderMessages(sess *session.LLMSession) (string, error) {
 		switch role {
 		case "user", "assistant":
 			if msg.Content.Text != nil {
-				res.WriteString(fmt.Sprintf("%s%s%s\n", color(role), msg.Content.Text, term.Reset))
+				res.WriteString(fmt.Sprintf("%s%s%s\n", color(role), *msg.Content.Text, term.Reset))
 			}
 		case "compact":
 			if msg.Content.Text != nil {
 				res.WriteString(fmt.Sprintf("%s%sCompact:%s\n", term.Green, term.Bold, term.Reset))
-				res.WriteString(fmt.Sprintf("%s%s%s\n", color("assistant"), msg.Content.Text, term.Reset))
+				res.WriteString(fmt.Sprintf("%s%s%s\n", color("assistant"), *msg.Content.Text, term.Reset))
 			}
 		default:
 			continue
