@@ -3,6 +3,9 @@ package session
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
+
 	"qmicode-go/app/config"
 	coresess "qmicode-go/codelib/session"
 )
@@ -28,8 +31,8 @@ func ListSessions(conf config.Config) ([]string, error) {
 	}
 	var sessions []string
 	for _, file := range files {
-		if !file.IsDir() {
-			sessions = append(sessions, file.Name()[:len(file.Name())-5])
+		if !file.IsDir() && filepath.Ext(file.Name()) == ".json" {
+			sessions = append(sessions, strings.TrimSuffix(file.Name(), ".json"))
 		}
 	}
 	return sessions, nil

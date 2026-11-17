@@ -9,6 +9,7 @@ import (
 	"qmicode-go/app/config"
 	"qmicode-go/cli"
 	"qmicode-go/cli/appstate"
+	"qmicode-go/gui"
 
 	"github.com/otiai10/copy"
 )
@@ -37,8 +38,8 @@ func main() {
 		case "chatgpt", "codex":
 			runCLI(appstate.ModeChatGPT)
 		case "gui":
-			// todo
-			os.Exit(0)
+			gui.Start()
+			return
 		case "oauth":
 			runOAuth()
 		case "help":

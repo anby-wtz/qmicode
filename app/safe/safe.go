@@ -31,6 +31,9 @@ func (save *SafeConfig) SaveToDefault(conf config.Config) error {
 	if err != nil {
 		return err
 	}
+	if data == nil {
+		data = make(map[string]any)
+	}
 	data["safe"] = *save
 	dataRaw, err = yaml.Marshal(&data)
 	if err != nil {
