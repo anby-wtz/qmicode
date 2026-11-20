@@ -29,7 +29,13 @@ func color(role string) string {
 func renderMessages(sess *session.LLMSession) (string, error) {
 	var res strings.Builder
 
+	var msgs []*session.LLMMessage
 	for _, msg := range sess.MessagesTree.IterFromChild(sess.CurrentIndex) {
+		msgs = append(msgs, msg)
+	}
+
+	for i := len(msgs) - 1; i >= 0; i-- {
+		msg := msgs[i]
 		role := msg.Role
 		switch role {
 		case "user", "assistant":
